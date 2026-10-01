@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+#
+# Stops the VM. Its disk, and so Incus and Ceph, are kept.
+#
+
+source "${0%/*}/functions.sh" || exit $?
+
+# Ends the web UI session of bin/incus-dash, if there is one.
+pkill -f "incus webui $name:"
+
+vm_runs || exit 0
+
+log "Stopping $name ..."
+limactl stop "$name" >/dev/null 2>&1 || fail "Stopping $name failed!"

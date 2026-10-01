@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+#
+# Creates the VM on the first run and starts it on later runs, then lists the
+# services. Lima runs provision/incus.sh and provision/ceph.sh in the VM on
+# every start, so the first start installs Incus and Ceph and takes about 7
+# minutes. It ends with one restart, for the kernel that ceph.sh installs.
+# Arguments go to limactl when the VM is created:
+#
+#   task up -- --cpus 4 --memory 8 --disk 40
+#
+
+source "${0%/*}/functions.sh" || exit $?
+
+output="${TMPDIR:-/tmp}/$name-up.log"
+
+#
+# Prints the limactl options for this platform: the Virtualization framework
+# on macOS, QEMU with KVM on Linux, nested virtualization on both.
+#
+function platform_options()
+{
+	case "$(uname -s)" in
+		Darwin)	echo "--vm-type=vz --nested-virt" ;;
+		Linux)	echo "--vm-type=qemu" ;;
+		*)	return 1 ;;
+	esac
+}
+
+#
+# Prints the steps that the provision scripts have logged in the VM since
+# the last call. Lima runs the scripts through cloud-init, so their output
+# is in its log file.
+#
+function print_progress()
+{
+	local steps
+
+	steps="$(limactl shell --workdir / "$name" sudo grep -h '^>>>' \
+		/var/log/cloud-init-output.log 2>/dev/null </dev/null)"
+	[[ -n "$steps" ]] || return 0
+
+	echo "$steps" | tail -n "+$(( seen + 1 ))"
+	seen="$(echo "$steps" | wc -l)"
+}
+
+#
+# Runs limactl start. Lima's own output goes to a file, which is shown when
+# the start fails. With "follow" as the first argument, the provision steps
+# are shown while it works.
+#
+function start()
+{
+	local follow="" pid seen=0
+
+	if [[ "$1" == "follow" ]]; then
+		follow="yes"
+		shift
+	fi
+
+	limactl start --tty=false --timeout 20m "$@" > "$output" 2>&1 &
+	pid="$!"
+
+	while kill -0 "$pid" 2>/dev/null; do
+		sleep 5
+		[[ -n "$follow" ]] && print_progress
+	done
+
+	wait "$pid" && return
+	tail -n 20 "$output" >&2
+	return 1
+}
+
+#
+# Tells whether the VM runs the newest kernel that is installed in it. After
+# the first start it does not: provision/ceph.sh has installed a newer one.
+#
+function kernel_is_current()
+{
+	# shellcheck disable=SC2016
+	guest bash -c '[[ "$(ls /boot/vmlinuz-* | sort -V | tail -n 1)" == \
+		"/boot/vmlinuz-$(uname -r)" ]]'
+}
+
+#
+# Waits until the three service ports answer on this computer.
+#
+function wait_for_services()
+{
+	local tries=12 url
+
+	for url in https://127.0.0.1:8443 https://127.0.0.1:8444 \
+	           http://127.0.0.1:8000; do
+		until curl -k -s -o /dev/null --max-time 3 "$url"; do
+			(( tries-- > 0 )) || return 1
+			sleep 5
+		done
+	done
+}
+
+command -v limactl >/dev/null || fail "limactl not found. Run: brew bundle"
+
+if vm_runs; then
+	:
+elif vm_exists; then
+	log "Starting $name ..."
+	start "$name" || fail "Starting $name failed, see $output"
+else
+	if [[ "$(uname -s)" == "Linux" && ! -w /dev/kvm ]]; then
+		fail "/dev/kvm is missing or not writable!"
+	fi
+
+	log "Creating $name. Installing Incus and Ceph takes about 7 minutes ..."
+	# shellcheck disable=SC2046
+	start follow --name "$name" $(platform_options) "$@" "$root/lima.yaml" ||
+		fail "Creating $name failed, see $output"
+fi
+
+if ! kernel_is_current; then
+	log "Restarting $name once, for the kernel that was installed ..."
+	limactl stop "$name" >/dev/null 2>&1 || fail "Stopping $name failed!"
+	start "$name" || fail "Starting $name failed, see $output"
+fi
+
+wait_for_services || error "Not every service answers yet."
+print_services

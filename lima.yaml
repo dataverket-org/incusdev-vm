@@ -1,0 +1,62 @@
+# incusdev: Debian 13 (trixie) as a testbed for Incus with virtual machines
+# and Ceph storage. Start it with "task up", not limactl directly: it picks
+# the VM type and turns nested virtualization on.
+
+minimumLimaVersion: "2.0.0"
+
+# Debian's official cloud image, the "generic" variant, of one dated build.
+# It has the full Debian kernel, with the kvm, vhost and rbd modules.
+# Renovate proposes newer builds, see renovate.json.
+images:
+- location: "https://cloud.debian.org/images/cloud/trixie/20260914-2601/debian-13-generic-amd64-20260914-2601.qcow2"
+  arch: "x86_64"
+- location: "https://cloud.debian.org/images/cloud/trixie/20260914-2601/debian-13-generic-arm64-20260914-2601.qcow2"
+  arch: "aarch64"
+
+# A small size that runs Ceph and boots one small virtual machine in Incus.
+# Memory is at the floor; the second CPU keeps the VM responsive while Ceph
+# works. For real work give it more: task up -- --cpus 4 --memory 8 --disk 40
+cpus: 2
+memory: "2GiB"
+disk: "20GiB"
+
+mounts: []
+
+containerd:
+  system: false
+  user: false
+
+# The same two scripts that install the testbed directly on a Debian host.
+# Lima copies them into the VM when it is created and runs them as root on
+# every start. They only change what is missing, so later starts are quick.
+#
+# The short step before them gives the VM's user the incus-admin group from
+# its first login. Lima connects before the scripts run, so a group added by
+# incus.sh would only count after a restart. The step runs before the user is
+# created, and makes the group a default for new users in this VM.
+provision:
+- mode: boot
+  script: |
+    #!/bin/sh
+    getent passwd "{{.User}}" >/dev/null && exit 0
+    groupadd --system incus-admin
+    echo "GROUPS=incus-admin" >> /etc/default/useradd
+- mode: system
+  file: provision/incus.sh
+- mode: system
+  file: provision/ceph.sh
+
+# The services reachable from the host, all on 127.0.0.1 and on the same port
+# as in the VM. Nothing else is forwarded. print_services in bin/functions.sh
+# lists the same ports; keep the two in step.
+portForwards:
+- guestPort: 8443   # Incus API and web UI
+  hostPort: 8443
+- guestPort: 8444   # Ceph dashboard
+  hostPort: 8444
+- guestPort: 8000   # S3 API, the Ceph object gateway
+  hostPort: 8000
+- guestIP: "0.0.0.0"
+  guestIPMustBeZero: false
+  guestPortRange: [1, 65535]
+  ignore: true

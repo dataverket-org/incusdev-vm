@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+#
+# Deletes the VM and everything in it, and the incus remote that
+# bin/incus-dash added for it.
+#
+
+source "${0%/*}/functions.sh" || exit $?
+
+# Ends the web UI session of bin/incus-dash, if there is one.
+pkill -f "incus webui $name:"
+
+if vm_exists; then
+	log "Deleting $name ..."
+	limactl delete --force "$name" >/dev/null 2>&1 ||
+		fail "Deleting $name failed!"
+fi
+
+if command -v incus >/dev/null; then
+	# Your default remote is only changed when it is the one being removed.
+	if [[ "$(incus remote get-default </dev/null)" == "$name" ]]; then
+		incus remote switch local </dev/null
+	fi
+	incus remote remove "$name" >/dev/null 2>&1 </dev/null
+fi
+
+log "Deleted $name."

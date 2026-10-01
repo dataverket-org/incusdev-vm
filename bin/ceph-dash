@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+#
+# Opens the Ceph dashboard in the browser. Its login cannot go in the URL, so
+# it is printed.
+#
+
+source "${0%/*}/functions.sh" || exit $?
+
+url="https://127.0.0.1:8444/"
+
+case "$(uname -s)" in
+	Darwin)	opener="open" ;;
+	*)	opener="xdg-open" ;;
+esac
+
+check_running || exit $?
+command -v "$opener" >/dev/null || fail "No $opener here. Open $url yourself."
+
+log "Opening $url ..."
+"$opener" "$url" || fail "Opening $url failed!"
+log "Log in as admin with the password admin@ceph123"

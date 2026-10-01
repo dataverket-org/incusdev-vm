@@ -1,0 +1,57 @@
+version: "3"
+
+tasks:
+  default:
+    desc: List the tasks
+    silent: true
+    cmds:
+      - task --list
+
+  up:
+    desc: Create the VM, or start it, and list its services
+    silent: true
+    cmds:
+      - bin/up {{.CLI_ARGS}}
+
+  check:
+    desc: Run the end-to-end test
+    silent: true
+    cmds:
+      - bin/check
+
+  incus-dash:
+    desc: Open the Incus web UI in the browser, logged in
+    silent: true
+    cmds:
+      - bin/incus-dash
+
+  ceph-dash:
+    desc: Open the Ceph dashboard in the browser
+    silent: true
+    cmds:
+      - bin/ceph-dash
+
+  s3-credentials:
+    desc: Print the S3 endpoint and keys as environment variables
+    silent: true
+    cmds:
+      - bin/s3-credentials
+
+  down:
+    desc: Stop the VM, keep its disk
+    silent: true
+    cmds:
+      - bin/down
+
+  destroy:
+    desc: Delete the VM and everything in it
+    prompt: Delete the VM and everything in it?
+    silent: true
+    cmds:
+      - bin/destroy
+
+  lint:
+    desc: Run shellcheck on the scripts and validate lima.yaml
+    cmds:
+      - shellcheck -s bash -e SC2034,SC2154,SC1090,SC1091,SC2242 bin/* provision/*.sh
+      - limactl validate lima.yaml

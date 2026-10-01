@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+#
+# Opens the Incus web UI in the browser, logged in.
+#
+# This script owns the remote named incusdev in your incus client
+# configuration: it adds it, and replaces it when it no longer works, as after
+# "task destroy". "incus webui" then opens the browser and stays in the
+# background, since the page works through it. "task down" ends it.
+#
+
+source "${0%/*}/functions.sh" || exit $?
+
+#
+# Prints a one-time token for a client of the given name, after removing the
+# certificates and unused tokens that the name already has in Incus. So a
+# remote that is set up again replaces its old entry.
+#
+function trust_token()
+{
+	local client="$1"
+
+	# shellcheck disable=SC2016
+	guest sudo bash -c '
+		incus config trust list -f json |
+		jq -r --arg name "$1" ".[] | select(.name == \$name) | .fingerprint" |
+		while read -r fingerprint; do
+			incus config trust remove "$fingerprint" || exit 1
+		done
+		incus config trust revoke-token "$1" >/dev/null 2>&1
+		incus config trust add --quiet "$1"
+	' bash "$client" || return $?
+}
+
+#
+# Makes sure that the incus client on this computer has a working remote for
+# the VM. A remote that does not answer is replaced. Your default remote is
+# only changed when it is the one being replaced.
+#
+function ensure_remote()
+{
+	local token
+
+	incus query "$name:/1.0/instances" >/dev/null 2>&1 </dev/null && return
+
+	if incus remote list -f csv </dev/null | grep -q "^${name}[ ,]"; then
+		log "Replacing the incus remote $name ..."
+		if [[ "$(incus remote get-default </dev/null)" == "$name" ]]; then
+			incus remote switch local </dev/null || return $?
+		fi
+		incus remote remove "$name" </dev/null || return $?
+	else
+		log "Adding the incus remote $name ..."
+	fi
+
+	token="$(trust_token "$name-host")" || return $?
+	incus remote add "$name" https://127.0.0.1:8443 --accept-certificate \
+		--token "$token" </dev/null || return $?
+}
+
+#
+# Starts "incus webui" in the background, in place of an earlier one. It
+# opens the browser by itself.
+#
+function open_webui()
+{
+	pkill -f "incus webui $name:"
+	nohup incus webui "$name:" >/dev/null 2>&1 </dev/null &
+
+	sleep 1
+	kill -0 "$!" 2>/dev/null || return 1
+}
+
+check_running || exit $?
+command -v incus >/dev/null || fail "incus not found. Run: brew bundle"
+
+ensure_remote || fail "Setting up the incus remote $name failed!"
+open_webui    || fail "The Incus web UI did not start. Try: incus webui $name:"
+
+log "The Incus web UI is open in your browser, logged in."
+log "It works until you run 'task down'."

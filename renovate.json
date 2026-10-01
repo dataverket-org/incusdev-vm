@@ -1,0 +1,70 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "customDatasources": {
+    "debian-cloud": {
+      "defaultRegistryUrlTemplate": "https://cloud.debian.org/images/cloud/{{packageName}}/",
+      "format": "html"
+    }
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Debian cloud image build that the Lima VM boots",
+      "managerFilePatterns": ["/^lima\\.yaml$/"],
+      "matchStrings": [
+        "cloud/trixie/(?<currentValue>\\d{8}-\\d+)/",
+        "-(?:amd64|arm64)-(?<currentValue>\\d{8}-\\d+)\\.qcow2"
+      ],
+      "depNameTemplate": "debian-13-generic",
+      "packageNameTemplate": "trixie",
+      "datasourceTemplate": "custom.debian-cloud",
+      "extractVersionTemplate": "^(?<version>\\d{8}-\\d+)/$",
+      "versioningTemplate": "regex:^(?<major>\\d{8})-(?<minor>\\d+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Ceph container image, by major version tag. The versions come from Ceph's own tags and count only once a stable release (x.2.y) exists, so development images are not proposed",
+      "managerFilePatterns": ["/^provision/ceph\\.sh$/", "/^README\\.md$/"],
+      "matchStrings": [
+        "quay\\.io/benjamin_holmes/ceph-aio:v(?<currentValue>\\d+)"
+      ],
+      "depNameTemplate": "ceph",
+      "packageNameTemplate": "https://github.com/ceph/ceph",
+      "datasourceTemplate": "git-tags",
+      "extractVersionTemplate": "^v(?<version>\\d+)\\.2\\.\\d+$",
+      "versioningTemplate": "regex:^(?<major>\\d+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Incus LTS release, which names the Zabbly package channel",
+      "managerFilePatterns": ["/^provision/incus\\.sh$/", "/^README\\.md$/"],
+      "matchStrings": [
+        "INCUS_CHANNEL:-lts-(?<currentValue>\\d+\\.0)\\}",
+        "lts-(?<currentValue>\\d+\\.0) \\(default\\)",
+        "`INCUS_CHANNEL` \\| `lts-(?<currentValue>\\d+\\.0)`",
+        "Incus (?<currentValue>\\d+\\.0) LTS"
+      ],
+      "depNameTemplate": "incus",
+      "packageNameTemplate": "https://github.com/lxc/incus",
+      "datasourceTemplate": "git-tags",
+      "extractVersionTemplate": "^v(?<version>\\d+\\.0)\\.0$",
+      "versioningTemplate": "regex:^(?<major>\\d+)\\.(?<minor>0)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Alpine release that the end-to-end test boots",
+      "managerFilePatterns": ["/^provision/check\\.sh$/", "/^README\\.md$/"],
+      "matchStrings": ["images:alpine/(?<currentValue>\\d+\\.\\d+)"],
+      "depNameTemplate": "alpine",
+      "datasourceTemplate": "docker"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "A new Ceph release needs its client repository named in provision/ceph.sh (ceph-tentacle today), so it waits for a person",
+      "matchPackageNames": ["ceph"],
+      "dependencyDashboardApproval": true
+    }
+  ]
+}
