@@ -31,6 +31,9 @@ uid="$(id -u "$user")"
 
 container="ceph-dev"
 
+# Where the password of the dashboard's admin is kept, for root to read.
+password_file="/etc/ceph/dashboard.password"
+
 # The health checks that Ceph raises once keys of the type aes are allowed.
 # They are what this setup is, so they are muted.
 aes_checks="AUTH_INSECURE_CLIENT_KEY_TYPE AUTH_INSECURE_KEYS_ALLOWED
@@ -262,6 +265,31 @@ function move_dashboard()
 }
 
 #
+# Gives the dashboard's admin a password of its own, in place of the one the
+# image comes with, which everyone knows. The dashboard takes commands a
+# moment after move_dashboard has started it again, so this tries for a
+# minute.
+#
+function set_dashboard_password()
+{
+	local tries=12
+
+	[[ -s "$password_file" ]] && return
+
+	log "Setting a password for the Ceph dashboard ..."
+	( umask 077 && printf "%s" "$(head -c 15 /dev/urandom | base64)" \
+		> "$password_file.new" ) || return $?
+
+	until ceph dashboard ac-user-set-password --force-password admin \
+	      -i "$password_file.new" >/dev/null 2>&1; do
+		(( tries-- > 0 )) || return 1
+		sleep 5
+	done
+
+	mv "$password_file.new" "$password_file" || return $?
+}
+
+#
 # Creates the two users of the object gateway, RadosGW: incusdev for the S3
 # API, and incusdev-admin, which may also use the RadosGW admin API, under
 # /admin on the same port. Ceph makes their keys;
@@ -336,6 +364,7 @@ load_rbd                || fail "Loading the rbd module failed!"
 configure_ceph_client   || fail "Configuring the Ceph client failed!"
 mute_aes_checks         || fail "Muting the health checks failed!"
 move_dashboard          || fail "Moving the Ceph dashboard failed!"
+set_dashboard_password  || fail "Setting the dashboard's password failed!"
 create_s3_users         || fail "Creating the S3 users failed!"
 create_incus_key        || fail "Creating the client.incus key failed!"
 configure_incus_storage || fail "Creating the ceph storage pool failed!"

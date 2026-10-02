@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Opens the Ceph dashboard in the browser. Its login cannot go in the URL, so
-# it is printed.
+# it is printed. The install made the password and keeps it in the VM.
 #
 
 source "${0%/*}/functions.sh" || exit $?
@@ -14,8 +14,12 @@ case "$(uname -s)" in
 esac
 
 check_running || exit $?
+
+password="$(guest sudo cat /etc/ceph/dashboard.password 2>/dev/null)" ||
+	fail "No dashboard password in $name: the install did not finish!"
+log "Log in as admin with the password $password"
+
 command -v "$opener" >/dev/null || fail "No $opener here. Open $url yourself."
 
 log "Opening $url ..."
 "$opener" "$url" || fail "Opening $url failed!"
-log "Log in as admin with the password admin@ceph123"

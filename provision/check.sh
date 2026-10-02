@@ -164,9 +164,26 @@ function check_signed()
 }
 
 #
-# Checks the services: the Incus API and web UI, the Ceph dashboard, and the
-# object gateway. There the S3 user lists its buckets, the admin user reads a
-# user through the RadosGW admin API, and the S3 user is refused the same.
+# Checks that the Ceph dashboard lets its admin in with the password that
+# ceph.sh has set.
+#
+function check_dashboard_login()
+{
+	local password
+
+	password="$(< /etc/ceph/dashboard.password)" || return $?
+	check_url https://127.0.0.1:8444/api/auth 201 \
+		-H "Accept: application/vnd.ceph.api.v1.0+json" \
+		-H "Content-Type: application/json" \
+		-d "{\"username\": \"admin\", \"password\": \"$password\"}" ||
+		return $?
+}
+
+#
+# Checks the services: the Incus API and web UI, the Ceph dashboard and its
+# login, and the object gateway. There the S3 user lists its buckets, the
+# admin user reads a user through the RadosGW admin API, and the S3 user is
+# refused the same.
 #
 function check_services()
 {
@@ -175,6 +192,7 @@ function check_services()
 	check_url https://127.0.0.1:8443/1.0 200 || return $?
 	check_url https://127.0.0.1:8443/ui/ 200 || return $?
 	check_url https://127.0.0.1:8444/    200 || return $?
+	check_dashboard_login                    || return $?
 
 	check_signed incusdev       http://127.0.0.1:8000/ 200 || return $?
 	check_signed incusdev-admin "$admin" 200               || return $?

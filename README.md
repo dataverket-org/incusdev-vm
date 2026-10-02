@@ -15,7 +15,7 @@ them in a VM on your computer.
 | Service | Port | Login |
 |---|---|---|
 | Incus API and web UI | 8443 | a client certificate |
-| Ceph dashboard | 8444 | `admin` / `admin@ceph123` |
+| Ceph dashboard | 8444 | `admin` and a password made at install |
 | S3 API | 8000 | keys of the user `incusdev` |
 | RadosGW admin API, under `/admin` | 8000 | keys of the user `incusdev-admin` |
 
@@ -98,8 +98,8 @@ the health checks that Ceph raises about it.
 [docs/troubleshooting.md](docs/troubleshooting.md) says why.
 
 On a host, the three services listen on all of its addresses, not only on
-`127.0.0.1`. The Ceph dashboard has a password that everyone knows, so keep
-port 8444 behind a firewall.
+`127.0.0.1`. The password of the Ceph dashboard is in
+`/etc/ceph/dashboard.password`, for root to read.
 
 The tasks above are for the Lima VM. On a host you use `incus`, `ceph` and
 `radosgw-admin` yourself; [docs/access.md](docs/access.md) has the commands.

@@ -52,10 +52,17 @@ limactl shell incusdev incus list
 
 ## Ceph dashboard
 
-`task dashboard -- ceph` opens `https://127.0.0.1:8444`. Log in as `admin`
-with the password `admin@ceph123`; a URL cannot carry that login. The password is the
-default of the ceph-aio image. It is fine on a loopback address and nowhere
-else.
+`task dashboard -- ceph` opens `https://127.0.0.1:8444` and prints the
+password; a URL cannot carry that login. Log in as `admin`. The install makes
+the password, in place of the one the ceph-aio image comes with, and keeps it
+in the VM:
+
+```sh
+limactl shell incusdev sudo cat /etc/ceph/dashboard.password
+```
+
+On a Debian host, read the file as root. `task reset` puts back the password
+of the first install; a new VM gets a new one.
 
 ## S3 API
 
