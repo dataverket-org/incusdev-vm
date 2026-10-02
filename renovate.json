@@ -59,12 +59,5 @@
       "depNameTemplate": "alpine",
       "datasourceTemplate": "docker"
     }
-  ],
-  "packageRules": [
-    {
-      "description": "A new Ceph release needs its client repository named in provision/ceph.sh (ceph-tentacle today), so it waits for a person",
-      "matchPackageNames": ["ceph"],
-      "dependencyDashboardApproval": true
-    }
   ]
 }

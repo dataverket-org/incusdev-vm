@@ -57,13 +57,20 @@ answers:
 | `task check` | Run the end-to-end test |
 | `task dashboard` | Open the Incus web UI, logged in, and the Ceph dashboard. One of them: `-- incus` or `-- ceph` |
 | `task s3-credentials` | Print the S3 endpoint and keys; `-- admin` for the RadosGW admin user |
+| `task reset` | Put the VM back to how it was right after the install |
 | `task down` | Stop the VM and keep its disk |
-| `task destroy` | Delete the VM |
+| `task destroy` | Delete the VM and the copy saved for `task reset` |
 | `task lint` | Run shellcheck and validate `lima.yaml` |
 
 After `task down`, `task up` and `task status` have the VM back in about
 30 seconds.
 Everything is kept: instances, images, the Ceph cluster and its data.
+
+To start over, `task reset` replaces the VM with a copy that `task up` saved
+right after the install. It takes about 30 seconds, where a new install takes
+7 minutes. The copy uses up to 6 GiB of disk; on a filesystem that can share
+blocks it uses almost none. `task destroy` followed by `task up` builds a new
+VM, and a new copy, from what is current.
 
 For a larger VM, give the size when you create it. What follows `--` goes to
 `limactl start`:
@@ -146,19 +153,13 @@ lima.yaml             the VM: image, size, the two scripts, port forwards
 Taskfile.yml          the tasks; each one calls a script in bin/
 bin/                  one script per task, for the Lima VM
 Brewfile              the tools
-renovate.json         lets Renovate propose newer versions, see below
+renovate.json         lets Renovate propose newer versions
 docs/                 the details
 ```
-
-[Renovate](https://docs.renovatebot.com) keeps four versions current through
-`renovate.json`: the Debian image build in `lima.yaml`, the Ceph image tag,
-the Incus LTS channel and the Alpine release that the test boots. Ceph is
-only proposed once a release is stable, and it waits for approval, because
-the Ceph client repository in `provision/ceph.sh` has to follow it by hand. The tools in the Brewfile are
-not pinned, so there is nothing to update there.
 
 | Document | Content |
 |---|---|
 | [docs/architecture.md](docs/architecture.md) | Diagram of the services, networks, ports and flows |
 | [docs/access.md](docs/access.md) | Log in to each service |
+| [docs/updates.md](docs/updates.md) | How newer versions get in, and how to check one before merging |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Where to look, known behaviour, why it is built this way, what is not tested |

@@ -1,6 +1,9 @@
 name="incusdev"
 root="${BASH_SOURCE[0]%/*}/.."
 
+# The stopped copy of the freshly installed VM that "task reset" starts from.
+base="$name-base"
+
 # Where "task up" keeps the output and the process ID of its background work.
 up_log="${TMPDIR:-/tmp}/$name-up.log"
 up_pid="${TMPDIR:-/tmp}/$name-up.pid"
@@ -44,6 +47,14 @@ function fail()
 function vm_exists()
 {
 	limactl list --quiet 2>/dev/null | grep -qx "$name"
+}
+
+#
+# Tells whether the saved copy for "task reset" exists.
+#
+function base_exists()
+{
+	limactl list --quiet 2>/dev/null | grep -qx "$base"
 }
 
 #

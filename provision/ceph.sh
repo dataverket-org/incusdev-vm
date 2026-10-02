@@ -21,9 +21,6 @@ export DEBIAN_FRONTEND=noninteractive
 export HOME=/root
 
 image="${CEPH_IMAGE:-quay.io/benjamin_holmes/ceph-aio:v20}"
-# The Proxmox repository with the Ceph client of the same release as the
-# image: ceph-tentacle is Ceph 20.
-client_repository="ceph-tentacle"
 osd_size="${OSD_SIZE:-10G}"
 # The user that gets the incus-admin group and runs Podman: INCUSDEV_USER,
 # or who called sudo, or the first user with a home directory in /home.
@@ -199,31 +196,48 @@ function wait_for_ceph()
 
 #
 # Installs the Ceph client of the cluster's release. Debian 13 ships Ceph 18;
-# Proxmox publishes newer ones for trixie, but for amd64 only.
+# Proxmox publishes newer ones for trixie, for amd64 only, in a repository
+# named after the release. The cluster says which release it is, so a newer
+# image brings its own client along.
 #
 function install_ceph_client()
 {
 	command -v ceph >/dev/null && return
 
 	local keyring="/usr/share/keyrings/proxmox-archive-keyring.gpg"
-	local url="https://enterprise.proxmox.com/debian"
+	local proxmox="download.proxmox.com/debian"
+	local release repository
 
-	if [[ "$(dpkg --print-architecture)" == "amd64" ]]; then
-		log "Adding the Proxmox repository $client_repository ..."
-		curl -fsSL -o "$keyring" \
-			"$url/proxmox-archive-keyring-trixie.gpg" || return $?
-		cat > /etc/apt/sources.list.d/ceph.sources <<EOF || return $?
+	if [[ "$(dpkg --print-architecture)" != "amd64" ]]; then
+		echo "*** No Proxmox packages for this architecture," \
+			"using Debian's Ceph client." >&2
+		apt_get install -y ceph-common || return $?
+		return
+	fi
+
+	# "ceph version 20.2.4 (7f79...) tentacle (stable)"
+	release="$(in_container ceph --version | awk '{ print $5 }')" || return $?
+	repository="ceph-$release"
+
+	if ! curl -fsSL -o /dev/null \
+	     "http://$proxmox/$repository/dists/trixie/InRelease"; then
+		echo "!!! Proxmox has no repository $repository for trixie:" \
+			"no client for this Ceph release." >&2
+		return 1
+	fi
+
+	log "Adding the Proxmox repository $repository ..."
+	curl -fsSL -o "$keyring" \
+		"https://enterprise.proxmox.com/debian/proxmox-archive-keyring-trixie.gpg" ||
+		return $?
+	cat > /etc/apt/sources.list.d/ceph.sources <<EOF || return $?
 Types: deb
-URIs: http://download.proxmox.com/debian/$client_repository
+URIs: http://$proxmox/$repository
 Suites: trixie
 Components: no-subscription
 Signed-By: $keyring
 EOF
-		apt_get update || return $?
-	else
-		echo "*** No Proxmox packages for this architecture," \
-			"using Debian's Ceph client." >&2
-	fi
+	apt_get update || return $?
 
 	log "Installing the Ceph client ..."
 	apt_get install -y ceph-common || return $?

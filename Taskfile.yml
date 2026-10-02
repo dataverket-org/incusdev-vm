@@ -37,6 +37,13 @@ tasks:
     cmds:
       - bin/s3-credentials {{.CLI_ARGS}}
 
+  reset:
+    desc: Put the VM back to how it was right after the install, in about 30 seconds
+    prompt: Replace the VM with the saved copy? Everything made in it is lost.
+    silent: true
+    cmds:
+      - bin/reset
+
   down:
     desc: Stop the VM, keep its disk
     silent: true
@@ -44,7 +51,7 @@ tasks:
       - bin/down
 
   destroy:
-    desc: Delete the VM and everything in it
+    desc: Delete the VM, everything in it, and the saved copy
     prompt: Delete the VM and everything in it?
     silent: true
     cmds:

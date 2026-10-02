@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+#
+# Puts the VM back to how it was right after the install: it replaces the VM
+# with a new copy of the one that "task up" saved then. Everything made in the
+# VM since is lost. It takes about 30 seconds, where a new install takes 7
+# minutes.
+#
+
+source "${0%/*}/functions.sh" || exit $?
+
+command -v limactl >/dev/null || fail "limactl not found. Run: brew bundle"
+up_runs && fail "$name is still starting. Follow it with: task status"
+base_exists ||
+	fail "There is no saved copy. Run 'task destroy' and 'task up' to make one!"
+
+# Ends the web UI session of bin/dash-incus, if there is one.
+pkill -f "incus webui $name:"
+
+log "Replacing $name with the saved copy ..."
+if vm_exists; then
+	limactl delete --force "$name" >/dev/null 2>&1 ||
+		fail "Deleting $name failed!"
+fi
+limactl clone --tty=false "$base" "$name" >/dev/null 2>&1 ||
+	fail "Copying $base to $name failed!"
+
+exec "${0%/*}/up"

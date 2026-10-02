@@ -5,7 +5,8 @@
 #
 # Lima runs provision/incus.sh and provision/ceph.sh in the VM on every start,
 # so the first start installs Incus and Ceph and takes about 7 minutes. It
-# ends with one restart, for the kernel that ceph.sh installs. Arguments go to
+# ends with one restart, for the kernel that ceph.sh installs; while the VM is
+# stopped for that, a copy of it is saved for "task reset". Arguments go to
 # limactl when the VM is created:
 #
 #   task up -- --cpus 4 --memory 8 --disk 40
@@ -38,23 +39,30 @@ function kernel_is_current()
 }
 
 #
-# Creates or starts the VM and waits for it, then restarts it once when a
-# newer kernel was installed. This is what runs in the background.
+# Creates or starts the VM and waits for it. A new VM is stopped once after
+# the install: a copy of it is saved for "task reset", and the next start
+# runs the kernel that ceph.sh installed. A VM that exists is restarted only
+# when a newer kernel was installed. This is what runs in the background.
 #
 function run()
 {
 	if vm_exists; then
 		limactl start --tty=false --timeout 20m "$name" || return $?
+		kernel_is_current && return
+
+		echo ">>> Restarting $name once, for the kernel that was installed ..."
+		limactl stop "$name" || return $?
 	else
 		# shellcheck disable=SC2046
 		limactl start --tty=false --timeout 20m --name "$name" \
 			$(platform_options) "$@" "$root/lima.yaml" || return $?
+
+		echo ">>> Saving a copy of $name for 'task reset', and restarting it ..."
+		limactl stop "$name" || return $?
+		limactl delete --force "$base" >/dev/null 2>&1
+		limactl clone --tty=false "$name" "$base" || return $?
 	fi
 
-	kernel_is_current && return
-
-	echo ">>> Restarting $name once, for the kernel that was installed ..."
-	limactl stop "$name"                            || return $?
 	limactl start --tty=false --timeout 20m "$name" || return $?
 }
 

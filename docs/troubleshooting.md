@@ -71,9 +71,15 @@ exists inside the container.
 Left alone, the dashboard module fails and puts Ceph in `HEALTH_ERR`.
 
 **The Ceph client from Proxmox.** The cluster is Ceph 20 (Tentacle). Debian
-13 ships Ceph 18. Proxmox publishes Ceph 20 for trixie, for amd64 only; on
-arm64 the scripts install Debian's client. The repository is named in
-`provision/ceph.sh` and has to follow the image's release.
+13 ships Ceph 18. Proxmox publishes newer ones for trixie, for amd64 only, in
+a repository named after the release; on arm64 the scripts install Debian's
+client. The install asks the cluster for its release name and uses the
+repository of that name, so client and cluster always match.
+
+**A saved copy for `task reset`.** A new VM is stopped once after the install,
+to start the new kernel. While it is stopped, `task up` clones it with
+`limactl clone`, as `incusdev-base`. That copy is never started. `task reset`
+deletes the VM and clones the copy again.
 
 **Linux 7 from backports.** Ceph makes its keys with the cipher `aes256k`.
 The kernel's RBD client, which Incus maps images with, knows that cipher from

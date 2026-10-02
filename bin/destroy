@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Deletes the VM and everything in it, and the incus remote that
-# bin/dash-incus added for it.
+# Deletes the VM and everything in it, the copy saved for "task reset", and
+# the incus remote that bin/dash-incus added for it.
 #
 
 source "${0%/*}/functions.sh" || exit $?
@@ -13,6 +13,11 @@ if vm_exists; then
 	log "Deleting $name ..."
 	limactl delete --force "$name" >/dev/null 2>&1 ||
 		fail "Deleting $name failed!"
+fi
+
+if base_exists; then
+	limactl delete --force "$base" >/dev/null 2>&1 ||
+		fail "Deleting $base failed!"
 fi
 
 if command -v incus >/dev/null; then
