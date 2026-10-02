@@ -57,6 +57,7 @@ services and whether each one answers:
 | `task check` | Run the end-to-end test |
 | `task dashboard` | Open the Incus web UI, logged in, and the Ceph dashboard, and print its password. One of them: `-- incus` or `-- ceph` |
 | `task s3-credentials` | Print the S3 endpoint and keys; `-- admin` for the RadosGW admin user |
+| `task dev` | Build Incus from source and run it in the VM, see below |
 | `task reset` | Put the VM back to how it was right after the install |
 | `task down` | Stop the VM and keep its disk |
 | `task destroy` | Delete the VM and the copy saved for `task reset` |
@@ -78,6 +79,44 @@ For a larger VM, give the size when you create it. What follows `--` goes to
 ```sh
 task up -- --cpus 4 --memory 8 --disk 40
 ```
+
+## Incus from source
+
+`task dev` builds Incus in the VM and runs it in place of the packaged
+daemon, client and agent. The package's QEMU, LXC and web UI stay. Running
+instances keep running while the daemon restarts. Run it again after each
+change to the source; Go only rebuilds what changed.
+
+The build needs 4 GiB of memory, and Ceph needs some too. To build your own
+checkout, set `INCUS_SRC` before you create the VM. `task up` then mounts that
+directory into the VM, read-only and at the same path:
+
+```sh
+export INCUS_SRC=~/src/incus          # in your shell profile
+task up -- --cpus 4 --memory 6
+task dev                              # build and run your checkout
+task check                            # the end-to-end test, on your build
+```
+
+Without `INCUS_SRC`, `task dev` builds the main branch, cloned in the VM and
+updated on each run. The output of the last build is in
+`/var/log/incus-dev-build.log` in the VM.
+
+A VM made before `INCUS_SRC` was set has no mount. Add it, and the memory, to
+the VM and to the copy that `task reset` starts from:
+
+```sh
+task down
+limactl edit --tty=false incusdev --memory 6 --mount "$INCUS_SRC"
+limactl edit --tty=false incusdev-base --memory 6 --mount "$INCUS_SRC"
+task up
+```
+
+A daemon built from main may upgrade its database past what the package can
+read. To go back to the package, use `task reset`.
+
+On a Debian host, after the other scripts:
+`sudo INCUS_SRC=$HOME/src/incus provision/incus-dev.sh`.
 
 ## Directly on a Debian host
 
@@ -146,15 +185,16 @@ at the top of the script before `task up`.
 ## How it is built
 
 ```
-provision/incus.sh    installs Incus; runs on a Debian host or in the VM
-provision/ceph.sh     installs Ceph and joins it to Incus; same
-provision/check.sh    the end-to-end test; same
-lima.yaml             the VM: image, size, the two scripts, port forwards
-Taskfile.yml          the tasks; each one calls a script in bin/
-bin/                  one script per task, for the Lima VM
-Brewfile              the tools
-renovate.json         lets Renovate propose newer versions
-docs/                 the details
+provision/incus.sh      installs Incus; runs on a Debian host or in the VM
+provision/ceph.sh       installs Ceph and joins it to Incus; same
+provision/check.sh      the end-to-end test; same
+provision/incus-dev.sh  builds Incus from source, for task dev; same
+lima.yaml               the VM: image, size, the two scripts, port forwards
+Taskfile.yml            the tasks; each one calls a script in bin/
+bin/                    one script per task, for the Lima VM
+Brewfile                the tools
+renovate.json           lets Renovate propose newer versions
+docs/                   the details
 ```
 
 | Document | Content |

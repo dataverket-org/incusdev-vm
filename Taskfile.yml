@@ -37,6 +37,12 @@ tasks:
     cmds:
       - bin/s3-credentials {{.CLI_ARGS}}
 
+  dev:
+    desc: "Build Incus from source in the VM and run it: from $INCUS_SRC if set, else from a clone of main"
+    silent: true
+    cmds:
+      - bin/dev
+
   reset:
     desc: Put the VM back to how it was right after the install, in about 30 seconds
     prompt: Replace the VM with the saved copy? Everything made in it is lost.
