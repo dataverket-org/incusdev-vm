@@ -115,4 +115,6 @@ file from the repository.
 
 - **The tools in the Brewfile.** They are not pinned; `brew upgrade` is yours.
 - **Debian itself.** A move to the next release is a change to make by hand:
-  the image in `lima.yaml`, the repositories in the scripts.
+  the image in `lima.yaml`, the repositories in the scripts. Debian 14 has
+  Linux 7, which cannot start virtual machines in Incus in a Lima VM on
+  Apple silicon; check that on a Mac first.

@@ -4,9 +4,9 @@
 # once and the work goes on in the background: "task status" follows it.
 #
 # Lima runs provision/incus.sh and provision/ceph.sh in the VM on every start,
-# so the first start installs Incus and Ceph and takes about 6 minutes. It
-# ends with one restart: the VM is stopped, and a copy of it is saved for
-# "task reset". Arguments go to limactl when the VM is created:
+# so the first start is the install, about 6 minutes. It ends with one
+# restart: the VM is stopped, and a copy of it is saved for "task reset".
+# Arguments go to limactl when the VM is created:
 #
 #   task up -- --cpus 4 --memory 8 --disk 40
 #

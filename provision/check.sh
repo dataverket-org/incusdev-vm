@@ -5,10 +5,10 @@
 #
 #   sudo provision/check.sh
 #
-# It checks KVM, Ceph, the kernel mapping an RBD image, an Incus
-# virtual machine that boots from the ceph pool and gets an address, and the
-# three service ports. It removes what it makes. It force-deletes an instance
-# named incusdev-check, so do not use that name yourself.
+# It checks KVM, Ceph, the kernel mapping an RBD image, an Incus virtual
+# machine that boots from the ceph pool and gets an address, and the three
+# service ports. It removes what it makes, and force-deletes any instance
+# named incusdev-check.
 #
 
 export HOME=/root
@@ -79,8 +79,7 @@ function check_rbd_map()
 }
 
 #
-# Waits until Incus has the ceph pool. After a boot, Incus is up before Ceph
-# and takes a minute or two to find it.
+# Waits until Incus has the ceph pool: after a boot Incus is up before Ceph.
 #
 function wait_for_pool()
 {
@@ -180,10 +179,8 @@ function check_dashboard_login()
 }
 
 #
-# Checks the services: the Incus API and web UI, the Ceph dashboard and its
-# login, and the object gateway. There the S3 user lists its buckets, the
-# admin user reads a user through the RadosGW admin API, and the S3 user is
-# refused the same.
+# Checks the services on their ports, the dashboard's login, and that the
+# RadosGW admin API lets the admin user in and refuses the S3 user.
 #
 function check_services()
 {

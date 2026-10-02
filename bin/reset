@@ -2,8 +2,7 @@
 #
 # Puts the VM back to how it was right after the install: it replaces the VM
 # with a new copy of the one that "task up" saved then. Everything made in the
-# VM since is lost. It takes about 30 seconds, where a new install takes 7
-# minutes.
+# VM since is lost.
 #
 
 source "${0%/*}/functions.sh" || exit $?

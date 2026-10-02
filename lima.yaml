@@ -13,9 +13,8 @@ images:
 - location: "https://cloud.debian.org/images/cloud/trixie/20260914-2601/debian-13-generic-arm64-20260914-2601.qcow2"
   arch: "aarch64"
 
-# A small size that runs Ceph and boots one small virtual machine in Incus.
-# Memory is at the floor; the second CPU keeps the VM responsive while Ceph
-# works. For real work give it more: task up -- --cpus 4 --memory 8 --disk 40
+# The smallest size that runs Ceph and one small virtual machine in Incus.
+# For more: task up -- --cpus 4 --memory 8 --disk 40
 cpus: 2
 memory: "2GiB"
 disk: "20GiB"
@@ -26,14 +25,13 @@ containerd:
   system: false
   user: false
 
-# The same two scripts that install the testbed directly on a Debian host.
-# Lima copies them into the VM when it is created and runs them as root on
-# every start. They only change what is missing, so later starts are quick.
+# The two scripts that also install the testbed on a Debian host. Lima copies
+# them into the VM when it is created, so a change to them needs a new VM,
+# and runs them as root on every start.
 #
-# The short step before them gives the VM's user the incus-admin group from
-# its first login. Lima connects before the scripts run, so a group added by
-# incus.sh would only count after a restart. The step runs before the user is
-# created, and makes the group a default for new users in this VM.
+# The boot step makes incus-admin a default group for new users, before Lima
+# creates the VM's user: a group that incus.sh adds would only count after a
+# restart.
 provision:
 - mode: boot
   script: |

@@ -66,7 +66,7 @@ flowchart TB
 |---|---|---|
 | Host loopback | `127.0.0.1` | The three forwarded ports. Nothing listens on other host addresses. |
 | Lima user network | VM at `192.168.5.15` | The VM's `eth0`, with outbound internet through the host. The Ceph daemons bind here. |
-| `incusbr0` | a random `10.x.x.1/24`, chosen when the bridge is created | Incus instances. Incus runs DHCP and DNS on the bridge and does NAT out through `eth0`. |
+| `incusbr0` | a random `10.x.x.1/24`, chosen when the bridge is created; on macOS always `10.158.42.1/24` | Incus instances. Incus runs DHCP and DNS on the bridge and does NAT out through `eth0`. |
 
 The Ceph container has no network of its own. It runs with `--network host`,
 so its daemons listen on the VM's own addresses. That is what lets the VM's
@@ -107,7 +107,8 @@ id  pool   image                       device
 
 **The kernel and Ceph.** The kernel RBD client first talks to the monitor on
 port 3300 or 6789 to authenticate and fetch the cluster map, then reads and
-writes blocks directly on the OSD.
+writes blocks directly on the OSD. It authenticates as `client.incus`, with a
+key of the type `aes`; [troubleshooting.md](troubleshooting.md) says why.
 
 **An instance on local storage.** With the profile `root-local` the root disk
 is a directory in the pool `default`, on the VM's own disk. Ceph is not

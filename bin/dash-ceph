@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # Opens the Ceph dashboard in the browser. Its login cannot go in the URL, so
-# it is printed. The install made the password and keeps it in the VM.
+# it is printed. The password is read from the VM, where
+# set_dashboard_password in provision/ceph.sh put it.
 #
 
 source "${0%/*}/functions.sh" || exit $?

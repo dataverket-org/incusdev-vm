@@ -5,8 +5,8 @@
 #
 #   sudo provision/incus.sh
 #
-# Lima runs it too, see lima.yaml. It can run again: every step checks before
-# it changes anything. Settings, from the environment:
+# Safe to run again; Lima runs it on every start, see lima.yaml. Settings,
+# from the environment:
 #
 #   INCUS_CHANNEL   Zabbly channel: lts-7.0 (default), lts-6.0 or stable
 #   INCUSDEV_USER   the user that gets the incus-admin group
@@ -16,12 +16,12 @@ export DEBIAN_FRONTEND=noninteractive
 export HOME=/root
 
 channel="${INCUS_CHANNEL:-lts-7.0}"
-# The user that gets the incus-admin group and runs Podman: INCUSDEV_USER,
-# or who called sudo, or the first user with a home directory in /home.
+# INCUSDEV_USER, else who called sudo, else the first user with a home
+# directory in /home.
 user="${INCUSDEV_USER:-${SUDO_USER:-$(getent passwd |
 	awk -F: '$6 ~ /^\/home\// { print $1; exit }')}}"
 
-# The bridge's address and subnet, where Incus cannot pick one itself.
+# The bridge's subnet where Incus finds none, see configure_network.
 subnet="10.158.42.1/24"
 
 keyring="/etc/apt/keyrings/zabbly.asc"
@@ -45,8 +45,8 @@ function fail()
 }
 
 #
-# Runs apt-get once no other apt or dpkg is at work, as one is right after a
-# first boot. The lock timeout covers one that starts in between.
+# Runs apt-get. It waits for another apt or dpkg instead of failing on the
+# lock.
 #
 function apt_get()
 {
@@ -92,8 +92,8 @@ EOF
 }
 
 #
-# Installs the Incus daemon, client and web UI. The Zabbly package carries its
-# own QEMU and firmware, so nothing else is needed for virtual machines.
+# Installs the Incus daemon, client and web UI. No qemu package: Zabbly's
+# incus carries its own QEMU and firmware.
 #
 function install_incus()
 {
@@ -131,10 +131,8 @@ function configure_server()
 
 #
 # Creates the bridge network and puts a NIC on it in the default profile.
-#
-# Incus picks an IPv4 subnet that nothing answers on. In a Lima VM on macOS
-# every address answers a ping, so Incus finds none: then the bridge gets
-# the subnet named here.
+# Where Incus finds no free IPv4 subnet, as in a Lima VM on macOS, the bridge
+# gets $subnet. See "The bridge's subnet on macOS" in docs/troubleshooting.md.
 #
 function configure_network()
 {

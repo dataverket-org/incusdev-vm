@@ -6,12 +6,11 @@
 #
 #   sudo provision/ceph.sh
 #
-# The cluster is newer than Debian 13's Ceph client and kernel, which only
-# know keys of the older type aes. So the script lets the cluster use that
-# type, and makes the keys of this machine with it.
+# The keys of this machine are of the type aes, not the cluster's aes256k.
+# See "Keys of the type aes" in docs/troubleshooting.md.
 #
-# Lima runs it too, see lima.yaml. It can run again: every step checks before
-# it changes anything. Settings, from the environment:
+# Safe to run again; Lima runs it on every start, see lima.yaml. Settings,
+# from the environment:
 #
 #   CEPH_IMAGE      default quay.io/benjamin_holmes/ceph-aio:v20
 #   OSD_SIZE        size of the one OSD, default 10G; counts on the first run
@@ -23,19 +22,18 @@ export HOME=/root
 
 image="${CEPH_IMAGE:-quay.io/benjamin_holmes/ceph-aio:v20}"
 osd_size="${OSD_SIZE:-10G}"
-# The user that gets the incus-admin group and runs Podman: INCUSDEV_USER,
-# or who called sudo, or the first user with a home directory in /home.
+# INCUSDEV_USER, else who called sudo, else the first user with a home
+# directory in /home.
 user="${INCUSDEV_USER:-${SUDO_USER:-$(getent passwd |
 	awk -F: '$6 ~ /^\/home\// { print $1; exit }')}}"
 uid="$(id -u "$user")"
 
 container="ceph-dev"
 
-# Where the password of the dashboard's admin is kept, for root to read.
+# Read by bin/dash-ceph and provision/check.sh too.
 password_file="/etc/ceph/dashboard.password"
 
-# The health checks that Ceph raises once keys of the type aes are allowed.
-# They are what this setup is, so they are muted.
+# The health checks that Ceph raises about keys of the type aes.
 aes_checks="AUTH_INSECURE_CLIENT_KEY_TYPE AUTH_INSECURE_KEYS_ALLOWED
 	AUTH_INSECURE_KEYS_CREATABLE AUTH_INSECURE_SERVICE_TICKETS"
 
@@ -57,7 +55,7 @@ function fail()
 }
 
 #
-# Runs a command as the Lima user, with the user's systemd session.
+# Runs a command as $user, with that user's systemd session.
 #
 function as_user()
 {
@@ -76,8 +74,8 @@ function in_container()
 }
 
 #
-# Runs apt-get once no other apt or dpkg is at work, as one is right after a
-# first boot. The lock timeout covers one that starts in between.
+# Runs apt-get. It waits for another apt or dpkg instead of failing on the
+# lock.
 #
 function apt_get()
 {
@@ -112,9 +110,8 @@ function install_podman()
 
 	loginctl enable-linger "$user" || return $?
 
-	# The user manager was started before dbus-user-session was installed,
-	# so it has to be told about the bus. Restarting it would close the
-	# session this script runs in.
+	# Not a restart of the user manager: that would close the session
+	# this script runs in.
 	as_user systemctl --user daemon-reload      || return $?
 	as_user systemctl --user start dbus.socket || return $?
 
@@ -127,8 +124,8 @@ function install_podman()
 }
 
 #
-# Starts the Ceph container on the host network, so the monitor is reachable
-# from the VM's kernel on the VM's own address.
+# Starts the Ceph container. On the host network: the kernel must reach the
+# monitor on the address that the monitor advertises.
 #
 function start_ceph()
 {
@@ -139,7 +136,7 @@ function start_ceph()
 			-e OSD_SIZE="$osd_size" "$image" || return $?
 	fi
 
-	# Brings the container back after a reboot of the VM.
+	# Starts the container at boot.
 	as_user systemctl --user enable -q podman-restart.service || return $?
 	as_user podman start "$container" >/dev/null || return $?
 }
@@ -172,7 +169,7 @@ function install_ceph_client()
 
 #
 # Lets the cluster use keys and tickets of the type aes, next to its own
-# type aes256k. The monitors apply the change a moment later.
+# type aes256k, and waits until the monitors show it.
 #
 function allow_aes()
 {
@@ -203,13 +200,12 @@ function load_rbd()
 
 #
 # Copies the cluster's configuration out of the container, and gives this
-# machine the admin key. The configuration is copied on every run, since it
-# names the monitor's address.
+# machine the admin key. The configuration is copied on every run: it names
+# the monitor's address.
 #
-# The cluster made its admin key with the type aes256k. The key is made anew
-# with the type aes, once, and the container gets the new one too. Right
-# after allow_aes the cluster may still refuse the type, so this tries for a
-# minute.
+# The admin key is rotated to the type aes, once. The container keeps a copy
+# of the key, so it gets the new one. The rotation is tried for a minute:
+# right after allow_aes the cluster still refuses the type.
 #
 function configure_ceph_client()
 {
@@ -237,7 +233,7 @@ function configure_ceph_client()
 }
 
 #
-# Mutes the health checks about keys of the type aes, for good.
+# Mutes $aes_checks. Sticky: the mutes outlast the checks clearing.
 #
 function mute_aes_checks()
 {
@@ -265,10 +261,9 @@ function move_dashboard()
 }
 
 #
-# Gives the dashboard's admin a password of its own, in place of the one the
-# image comes with, which everyone knows. The dashboard takes commands a
-# moment after move_dashboard has started it again, so this tries for a
-# minute.
+# Replaces the image's password of the dashboard's admin with a random one,
+# once, and keeps it in $password_file. It is tried for a minute: the
+# dashboard takes no commands right after move_dashboard.
 #
 function set_dashboard_password()
 {
@@ -291,9 +286,8 @@ function set_dashboard_password()
 
 #
 # Creates the two users of the object gateway, RadosGW: incusdev for the S3
-# API, and incusdev-admin, which may also use the RadosGW admin API, under
-# /admin on the same port. Ceph makes their keys;
-# "radosgw-admin user info --uid NAME" shows them.
+# API, and incusdev-admin, which may also use the RadosGW admin API under
+# /admin. Ceph makes their keys.
 #
 function create_s3_users()
 {

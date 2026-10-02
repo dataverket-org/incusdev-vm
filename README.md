@@ -38,8 +38,8 @@ task check         # run the end-to-end test: 1 to 2 minutes
 ```
 
 `task up` starts the work in the background. `task status` prints the install
-steps as they happen, and ends with the services and whether each one
-answers:
+steps as they happen, a step that failed with `!!!`, and ends with the
+services and whether each one answers:
 
 ```
 >>> Services on this computer:
@@ -55,7 +55,7 @@ answers:
 | `task up` | Create the VM, or start it, in the background |
 | `task status` | Show the VM and its services; while it starts, follow the steps |
 | `task check` | Run the end-to-end test |
-| `task dashboard` | Open the Incus web UI, logged in, and the Ceph dashboard. One of them: `-- incus` or `-- ceph` |
+| `task dashboard` | Open the Incus web UI, logged in, and the Ceph dashboard, and print its password. One of them: `-- incus` or `-- ceph` |
 | `task s3-credentials` | Print the S3 endpoint and keys; `-- admin` for the RadosGW admin user |
 | `task reset` | Put the VM back to how it was right after the install |
 | `task down` | Stop the VM and keep its disk |

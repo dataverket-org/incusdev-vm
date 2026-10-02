@@ -12,13 +12,19 @@ In the Lima VM, put `limactl shell incusdev` in front of the commands.
 | What does Incus say? | `sudo tail /var/log/incus/incusd.log` |
 | What did the install do in the VM? | `sudo grep -E '>>>\|!!!' /var/log/cloud-init-output.log` |
 | What is the VM doing? | `task status` |
-| Why did Lima not start? | `/tmp/incusdev-up.log`, and `~/.lima/incusdev/ha.stderr.log` |
+| Why did Lima not start? | `incusdev-up.log` in `$TMPDIR`, or in `/tmp` where that is not set, and `~/.lima/incusdev/ha.stderr.log` |
 
 ## Known behaviour
 
 **The pool `ceph` is `UNAVAILABLE` after a start.** Incus starts before Ceph.
 It tries the pool again every minute and finds it. Wait a minute or two;
 the end-to-end test waits for it.
+
+**A step of the install failed.** `task status` prints it with `!!!`, and
+the VM starts all the same. Lima runs the scripts again on every start, so
+`task down` and `task up` may finish the install. The copy for `task reset`
+was saved before that and stays unfinished: for a whole one, run
+`task destroy` and `task up`.
 
 **Ceph has four muted health checks.** `sudo ceph health detail` lists them
 as `(MUTED, STICKY)`; their names begin with `AUTH_INSECURE_`. They say that
@@ -87,6 +93,11 @@ virtual machines in Incus: they hang before their kernel starts. Linux 6.12
 can, and it needs `aes`. So every install uses `aes`, with Debian's own
 kernel and client, and is the same on both architectures.
 
+**A password for the Ceph dashboard.** The ceph-aio image comes with the
+login `admin` and `admin@ceph123`. On a host the dashboard listens on all
+addresses, so `ceph.sh` sets a random password once and keeps it in
+`/etc/ceph/dashboard.password`.
+
 **A saved copy for `task reset`.** A new VM is stopped once after the install.
 While it is stopped, `task up` clones it with `limactl clone`, as
 `incusdev-base`. That copy is never started. `task reset` deletes the VM and
@@ -110,11 +121,13 @@ for it: launch with `--config security.secureboot=false`.
 
 The Lima VM is tested on Linux x86_64 and on macOS with Apple silicon (M5,
 macOS 26): a new VM, `task check`, `task down` and `task up`, `task reset`
-and `task s3-credentials`.
+and `task s3-credentials`. `task check` logs in to the Ceph dashboard with
+its password.
 
 Not tested:
 
-- `task dashboard` on macOS.
+- `task dashboard` on macOS, and on Linux since it prints the dashboard's
+  password.
 - arm64 on Linux.
 - The three scripts run by hand on a plain Debian 13 machine, since they
   changed to keys of the type `aes`.
