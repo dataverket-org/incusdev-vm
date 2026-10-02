@@ -11,6 +11,7 @@ In the Lima VM, put `limactl shell incusdev` in front of the commands.
 | Is the Ceph container up? | `podman ps`, as the user that runs it |
 | What does Incus say? | `sudo tail /var/log/incus/incusd.log` |
 | What did the install do in the VM? | `sudo grep -E '>>>\|!!!' /var/log/cloud-init-output.log` |
+| What is the VM doing? | `task status` |
 | Why did Lima not start? | `/tmp/incusdev-up.log`, and `~/.lima/incusdev/ha.stderr.log` |
 
 ## Known behaviour
@@ -36,9 +37,11 @@ On macOS it needs Apple silicon M3 or newer and macOS 15 or newer.
 **A scripted `incus` command hangs.** `incus` reads YAML from stdin whenever
 stdin is not a terminal. Close stdin: `incus launch ... </dev/null`.
 
-**The first `task up` is slow.** Lima runs the two scripts inside the first
+**The first start is slow.** Lima runs the two scripts inside the first
 start, so that start is the install. Later starts run them again, and they
-find nothing to change.
+find nothing to change. `task up` only begins the start and returns;
+`task status` follows it. The tasks that need the VM say so while it is still
+starting.
 
 ## Why it is built this way
 
@@ -67,12 +70,6 @@ exists inside the container.
 **The Ceph dashboard on port 8444.** Its default is 8443, which Incus uses.
 Left alone, the dashboard module fails and puts Ceph in `HEALTH_ERR`.
 
-**Telemetry on, but sending nothing.** The dashboard shows a "please activate
-Telemetry" banner for as long as the telemetry module is off, and has no
-setting to hide it. The scripts turn the module on with every channel off and
-with report addresses that nothing listens on (`http://127.0.0.1:9`), so no
-data leaves the machine.
-
 **The Ceph client from Proxmox.** The cluster is Ceph 20 (Tentacle). Debian
 13 ships Ceph 18. Proxmox publishes Ceph 20 for trixie, for amd64 only; on
 arm64 the scripts install Debian's client. The repository is named in
@@ -89,9 +86,9 @@ good.
 
 **The scripts do not reboot.** A reboot in the middle of an install is a
 surprise on a host. `ceph.sh` finishes on the old kernel and says that a
-reboot is needed; `check.sh` refuses to run until it has happened. `task up`
-restarts the Lima VM once, when the running kernel is not the newest one
-installed.
+reboot is needed; `check.sh` refuses to run until it has happened. The start
+that `task up` begins restarts the Lima VM once, when the running kernel is
+not the newest one installed.
 
 **The scripts wait for apt.** Right after a first boot, something else often
 runs `apt-get`. The scripts wait for it instead of failing on the lock.

@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+#
+# Says what state the VM is in. While "task up" is at work in the background
+# it follows it: the install steps are printed as they happen, until the VM
+# is up. Then it lists the services.
+#
+
+source "${0%/*}/functions.sh" || exit $?
+
+seen=0
+notes=0
+
+#
+# Prints the steps that the provision scripts have logged in the VM during
+# this boot and since the last call. Lima runs the scripts through cloud-init,
+# so their output is in its log file, after the line that marks the boot.
+#
+function print_steps()
+{
+	local steps
+
+	# shellcheck disable=SC2016
+	steps="$(guest sudo awk '
+		/^Cloud-init v.*running .init-local./ { n = 0 }
+		/^>>>/                                 { step[n++] = $0 }
+		END { for (i = 0; i < n; i++) print step[i] }
+	' /var/log/cloud-init-output.log 2>/dev/null)"
+	[[ -n "$steps" ]] || return 0
+
+	# A restart of the VM starts the count again.
+	(( $(echo "$steps" | wc -l) < seen )) && seen=0
+
+	echo "$steps" | tail -n "+$(( seen + 1 ))"
+	seen="$(echo "$steps" | wc -l)"
+}
+
+#
+# Prints what "task up" itself has logged since the last call: that it
+# restarts the VM for a new kernel.
+#
+function print_notes()
+{
+	local lines
+
+	lines="$(grep '^>>>' "$up_log" 2>/dev/null)"
+	[[ -n "$lines" ]] || return 0
+
+	echo "$lines" | tail -n "+$(( notes + 1 ))"
+	notes="$(echo "$lines" | wc -l)"
+}
+
+#
+# Follows "task up" until it has finished, and says how it went.
+#
+function follow_up()
+{
+	log "$name is starting. Its steps, as they happen:"
+
+	while up_runs; do
+		print_steps
+		print_notes
+		sleep 5
+	done
+	print_steps
+
+	vm_runs && return
+
+	error "Starting $name failed. The end of $up_log:"
+	tail -n 15 "$up_log" >&2
+	return 1
+}
+
+command -v limactl >/dev/null || fail "limactl not found. Run: brew bundle"
+
+if up_runs; then
+	follow_up || exit $?
+elif ! vm_exists; then
+	log "There is no VM yet. Create it with: task up"
+	exit
+elif ! vm_runs; then
+	log "$name is stopped. Start it with: task up"
+	exit
+fi
+
+log "$name is running. Waiting for the services ..."
+wait_for_services || error "Not every service answers yet."
+print_services

@@ -10,7 +10,7 @@ service; accept the certificate.
 ## Incus web UI
 
 ```sh
-task incus-dash
+task dashboard -- incus
 ```
 
 This opens the web UI in your browser, already logged in. It works through
@@ -37,7 +37,7 @@ incus webui myhost:
 
 ## Incus API, with the incus client
 
-After the first `task incus-dash`, the remote is there:
+After the first `task dashboard`, the remote is there:
 
 ```sh
 incus list incusdev:
@@ -52,15 +52,23 @@ limactl shell incusdev incus list
 
 ## Ceph dashboard
 
-`task ceph-dash` opens `https://127.0.0.1:8444`. Log in as `admin` with the
-password `admin@ceph123`; a URL cannot carry that login. The password is the
+`task dashboard -- ceph` opens `https://127.0.0.1:8444`. Log in as `admin`
+with the password `admin@ceph123`; a URL cannot carry that login. The password is the
 default of the ceph-aio image. It is fine on a loopback address and nowhere
 else.
 
 ## S3 API
 
-The install creates one S3 user, `incusdev`. Ceph makes its keys.
-`task s3-credentials` prints them with the endpoint, as environment variables:
+The install creates two users on the object gateway, RadosGW. Ceph makes
+their keys.
+
+| User | For |
+|---|---|
+| `incusdev` | the S3 API: buckets and objects |
+| `incusdev-admin` | the same, and the RadosGW admin API |
+
+`task s3-credentials` prints the keys of `incusdev` with the endpoint, as
+environment variables:
 
 ```sh
 eval "$(task s3-credentials)"
@@ -81,9 +89,31 @@ sudo radosgw-admin user info --uid incusdev
 sudo radosgw-admin user create --uid alice --display-name Alice
 ```
 
+## RadosGW admin API
+
+The object gateway, RadosGW, has an admin API for what `radosgw-admin` does:
+users, keys, quotas, buckets and usage. It is on the same port as the S3 API,
+under `/admin`, and takes the same signed requests. Only `incusdev-admin` may
+use it; `incusdev` gets a 403.
+
+```sh
+eval "$(task s3-credentials -- admin)"
+sign=(--aws-sigv4 "aws:amz:us-east-1:s3"
+	--user "$AWS_ACCESS_KEY_ID:$AWS_SECRET_ACCESS_KEY")
+
+curl "${sign[@]}" "$AWS_ENDPOINT_URL/admin/user?uid=incusdev"
+curl "${sign[@]}" "$AWS_ENDPOINT_URL/admin/bucket"
+curl "${sign[@]}" -X PUT \
+	"$AWS_ENDPOINT_URL/admin/user?uid=alice&display-name=Alice"
+curl "${sign[@]}" -X DELETE "$AWS_ENDPOINT_URL/admin/user?uid=alice"
+```
+
+The answers are JSON. Ceph's documentation lists the calls under "Admin
+Operations".
+
 ## A port is already in use
 
 With Lima, the ports 8443, 8444 and 8000 must be free on `127.0.0.1`. If
-another program holds one, Lima cannot forward it, and `task up` lists the
+another program holds one, Lima cannot forward it, and `task status` lists the
 service as `down` or shows the other program. Stop that program and run
 `task down` and `task up`.

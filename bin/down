@@ -5,8 +5,12 @@
 
 source "${0%/*}/functions.sh" || exit $?
 
-# Ends the web UI session of bin/incus-dash, if there is one.
+# Ends the web UI session of bin/dash-incus, if there is one.
 pkill -f "incus webui $name:"
+
+if up_runs; then
+	fail "$name is still starting. Follow it with: task status"
+fi
 
 vm_runs || exit 0
 

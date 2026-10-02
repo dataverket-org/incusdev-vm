@@ -32,7 +32,7 @@ flowchart TB
         subgraph ceph["Podman container ceph-dev - rootless, host network"]
             mon["mon<br/>192.168.5.15 :3300 :6789"]
             mgr["mgr<br/>dashboard :8444"]
-            rgw["rgw<br/>S3 API :8000"]
+            rgw["rgw<br/>S3 API and RadosGW admin API :8000"]
             osd[("osd :6800-6811<br/>one sparse 10G file")]
         end
     end
@@ -79,7 +79,7 @@ monitor would advertise an address that only exists inside the container.
 |---|---|---|---|
 | 8443 | all VM addresses | Incus API and web UI (`/ui/`) | yes, `https://127.0.0.1:8443` |
 | 8444 | all VM addresses | Ceph dashboard | yes, `https://127.0.0.1:8444` |
-| 8000 | all VM addresses | S3 API, the Ceph object gateway | yes, `http://127.0.0.1:8000` |
+| 8000 | all VM addresses | S3 API of the Ceph object gateway (RadosGW), and the RadosGW admin API under `/admin` | yes, `http://127.0.0.1:8000` |
 | 3300, 6789 | `192.168.5.15` | Ceph monitor, protocol v2 and v1 | no |
 | 6800-6811 | `192.168.5.15` | Ceph OSD, manager and metadata server | no |
 | 53, 67 | `incusbr0` | DNS and DHCP for instances | no |

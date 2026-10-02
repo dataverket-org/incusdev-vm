@@ -1,17 +1,23 @@
 version: "3"
 
 tasks:
+  # Plain "task" lists the tasks. It has no description, so it is not listed.
   default:
-    desc: List the tasks
     silent: true
     cmds:
       - task --list
 
   up:
-    desc: Create the VM, or start it, and list its services
+    desc: Create the VM, or start it, in the background. Follow it with task status
     silent: true
     cmds:
       - bin/up {{.CLI_ARGS}}
+
+  status:
+    desc: Show the VM and its services, and follow a start while it is at work
+    silent: true
+    cmds:
+      - bin/status
 
   check:
     desc: Run the end-to-end test
@@ -19,23 +25,17 @@ tasks:
     cmds:
       - bin/check
 
-  incus-dash:
-    desc: Open the Incus web UI in the browser, logged in
+  dashboard:
+    desc: "Open both dashboards in the browser. One of them: task dashboard -- incus, or -- ceph"
     silent: true
     cmds:
-      - bin/incus-dash
-
-  ceph-dash:
-    desc: Open the Ceph dashboard in the browser
-    silent: true
-    cmds:
-      - bin/ceph-dash
+      - bin/dash {{.CLI_ARGS}}
 
   s3-credentials:
-    desc: Print the S3 endpoint and keys as environment variables
+    desc: "Print the S3 endpoint and keys as environment variables. For the RadosGW admin user: task s3-credentials -- admin"
     silent: true
     cmds:
-      - bin/s3-credentials
+      - bin/s3-credentials {{.CLI_ARGS}}
 
   down:
     desc: Stop the VM, keep its disk

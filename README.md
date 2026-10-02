@@ -10,13 +10,14 @@ them in a VM on your computer.
 - Incus 7.0 LTS with its web UI, running virtual machines and containers.
 - A one-node Ceph cluster with block storage (RBD), an S3 API and a dashboard.
 - Two Incus storage pools: `default` on local disk and `ceph` on RBD.
-- Three services:
+- These services:
 
 | Service | Port | Login |
 |---|---|---|
 | Incus API and web UI | 8443 | a client certificate |
 | Ceph dashboard | 8444 | `admin` / `admin@ceph123` |
 | S3 API | 8000 | keys of the user `incusdev` |
+| RadosGW admin API, under `/admin` | 8000 | keys of the user `incusdev-admin` |
 
 ## In a VM on your computer
 
@@ -31,33 +32,37 @@ and 8000 must be free on `127.0.0.1`.
 
 ```sh
 brew bundle        # install the tools
-task up            # create the VM and install everything: about 7 minutes
+task up            # create the VM; returns at once, the install runs on
+task status        # follow the install: about 7 minutes, then the services
 task check         # run the end-to-end test: 1 to 2 minutes
 ```
 
-`task up` prints the install steps as they happen, and ends with the services
-and whether each one answers:
+`task up` starts the work in the background. `task status` prints the install
+steps as they happen, and ends with the services and whether each one
+answers:
 
 ```
 >>> Services on this computer:
-  Incus API       https://127.0.0.1:8443      up    task incus-dash adds the incus remote
-  Incus web UI    https://127.0.0.1:8443/ui/  up    task incus-dash
-  Ceph dashboard  https://127.0.0.1:8444      up    task ceph-dash
-  S3 API          http://127.0.0.1:8000       up    task s3-credentials
+  Incus API          https://127.0.0.1:8443      up    task dashboard adds the incus remote
+  Incus web UI       https://127.0.0.1:8443/ui/  up    task dashboard -- incus
+  Ceph dashboard     https://127.0.0.1:8444      up    task dashboard -- ceph
+  S3 API             http://127.0.0.1:8000       up    task s3-credentials
+  RadosGW admin API  http://127.0.0.1:8000/admin up    task s3-credentials -- admin
 ```
 
 | Task | What it does |
 |---|---|
-| `task up` | Create the VM, or start it, and list its services |
+| `task up` | Create the VM, or start it, in the background |
+| `task status` | Show the VM and its services; while it starts, follow the steps |
 | `task check` | Run the end-to-end test |
-| `task incus-dash` | Open the Incus web UI in the browser, logged in |
-| `task ceph-dash` | Open the Ceph dashboard in the browser |
-| `task s3-credentials` | Print the S3 endpoint and keys |
+| `task dashboard` | Open the Incus web UI, logged in, and the Ceph dashboard. One of them: `-- incus` or `-- ceph` |
+| `task s3-credentials` | Print the S3 endpoint and keys; `-- admin` for the RadosGW admin user |
 | `task down` | Stop the VM and keep its disk |
 | `task destroy` | Delete the VM |
 | `task lint` | Run shellcheck and validate `lima.yaml` |
 
-After `task down`, `task up` starts the VM again in about 30 seconds.
+After `task down`, `task up` and `task status` have the VM back in about
+30 seconds.
 Everything is kept: instances, images, the Ceph cluster and its data.
 
 For a larger VM, give the size when you create it. What follows `--` goes to
@@ -110,7 +115,7 @@ incus list
 | `root-ceph` | the pool `ceph`, an RBD image in the Ceph cluster |
 
 Run these on the host itself, in the VM with `limactl shell incusdev`, or
-from your computer once `task incus-dash` has added the remote:
+from your computer once `task dashboard` has added the remote:
 `incus list incusdev:`.
 
 ## Settings

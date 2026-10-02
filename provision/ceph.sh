@@ -275,39 +275,27 @@ function move_dashboard()
 }
 
 #
-# Hides the dashboard's "please activate Telemetry" banner. The dashboard has
-# no setting for it: the banner shows for as long as the telemetry module is
-# off. So the module is turned on with every channel off and with report
-# addresses that nothing listens on, which sends no data anywhere.
+# Creates the two users of the object gateway, RadosGW: incusdev for the S3
+# API, and incusdev-admin, which may also use the RadosGW admin API, under
+# /admin on the same port. Ceph makes their keys;
+# "radosgw-admin user info --uid NAME" shows them.
 #
-function mute_telemetry_banner()
+function create_s3_users()
 {
-	local nowhere="http://127.0.0.1:9"
-	local channel
+	local caps="users=*;buckets=*;metadata=*;usage=*;info=*"
 
-	ceph telemetry status | jq -e '.enabled' >/dev/null && return
+	if ! radosgw-admin user info --uid incusdev >/dev/null 2>&1; then
+		log "Creating the S3 user incusdev ..."
+		radosgw-admin user create --uid incusdev \
+			--display-name "incusdev" >/dev/null 2>&1 || return $?
+	fi
 
-	log "Hiding the telemetry banner in the Ceph dashboard ..."
-	for channel in basic crash device ident perf; do
-		ceph config set mgr "mgr/telemetry/channel_$channel" false ||
-			return $?
-	done
-	ceph config set mgr mgr/telemetry/url "$nowhere/report"        || return $?
-	ceph config set mgr mgr/telemetry/device_url "$nowhere/device" || return $?
-	ceph telemetry on --license sharing-1-0 >/dev/null             || return $?
-}
+	radosgw-admin user info --uid incusdev-admin >/dev/null 2>&1 && return
 
-#
-# Creates the S3 user incusdev on the object gateway. Its keys are made by
-# Ceph; "radosgw-admin user info --uid incusdev" shows them.
-#
-function create_s3_user()
-{
-	radosgw-admin user info --uid incusdev >/dev/null 2>&1 && return
-
-	log "Creating the S3 user incusdev ..."
-	radosgw-admin user create --uid incusdev \
-		--display-name "incusdev" >/dev/null 2>&1 || return $?
+	log "Creating the RadosGW admin user incusdev-admin ..."
+	radosgw-admin user create --uid incusdev-admin \
+		--display-name "incusdev admin" \
+		--caps "$caps" >/dev/null 2>&1 || return $?
 }
 
 #
@@ -360,8 +348,7 @@ install_ceph_client     || fail "Installing the Ceph client failed!"
 load_rbd                || fail "Loading the rbd module failed!"
 configure_ceph_client   || fail "Configuring the Ceph client failed!"
 move_dashboard          || fail "Moving the Ceph dashboard failed!"
-mute_telemetry_banner   || fail "Hiding the telemetry banner failed!"
-create_s3_user          || fail "Creating the S3 user failed!"
+create_s3_users         || fail "Creating the S3 users failed!"
 create_incus_key        || fail "Creating the client.incus key failed!"
 configure_incus_storage || fail "Creating the ceph storage pool failed!"
 

@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+#
+# Opens the dashboards in the browser: both, or the one that is named.
+#
+#   bin/dash          the Ceph dashboard and the Incus web UI
+#   bin/dash incus    the Incus web UI, logged in
+#   bin/dash ceph     the Ceph dashboard
+#
+
+case "${1:-}" in
+	"")	"${0%/*}/dash-ceph" && "${0%/*}/dash-incus" ;;
+	incus)	"${0%/*}/dash-incus" ;;
+	ceph)	"${0%/*}/dash-ceph" ;;
+	*)
+		echo "usage: task dashboard [-- incus|ceph]" >&2
+		exit 1
+		;;
+esac

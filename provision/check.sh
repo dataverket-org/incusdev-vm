@@ -159,24 +159,38 @@ function check_url()
 }
 
 #
+# Checks that a URL answers a request signed with the keys of a user of the
+# object gateway with the expected HTTP status.
+#
+function check_signed()
+{
+	local user="$1"
+	local url="$2"
+	local expected="$3"
+	local keys
+
+	keys="$(radosgw-admin user info --uid "$user" 2>/dev/null |
+		jq -r '.keys[0] | "\(.access_key):\(.secret_key)"')" || return $?
+	check_url "$url" "$expected" \
+		--aws-sigv4 "aws:amz:us-east-1:s3" --user "$keys" || return $?
+}
+
+#
 # Checks the services: the Incus API and web UI, the Ceph dashboard, and the
-# S3 API with a signed request that lists the buckets of the incusdev user.
+# object gateway. There the S3 user lists its buckets, the admin user reads a
+# user through the RadosGW admin API, and the S3 user is refused the same.
 #
 function check_services()
 {
-	local access_key secret_key
+	local admin="http://127.0.0.1:8000/admin/user?uid=incusdev"
 
 	check_url https://127.0.0.1:8443/1.0 200 || return $?
 	check_url https://127.0.0.1:8443/ui/ 200 || return $?
 	check_url https://127.0.0.1:8444/    200 || return $?
 
-	access_key="$(radosgw-admin user info --uid incusdev 2>/dev/null |
-		jq -r '.keys[0].access_key')" || return $?
-	secret_key="$(radosgw-admin user info --uid incusdev 2>/dev/null |
-		jq -r '.keys[0].secret_key')" || return $?
-	check_url http://127.0.0.1:8000/ 200 \
-		--aws-sigv4 "aws:amz:us-east-1:s3" \
-		--user "$access_key:$secret_key" || return $?
+	check_signed incusdev       http://127.0.0.1:8000/ 200 || return $?
+	check_signed incusdev-admin "$admin" 200               || return $?
+	check_signed incusdev       "$admin" 403               || return $?
 }
 
 [[ $EUID -eq 0 ]] || fail "Run this as root!"
