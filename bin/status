@@ -11,9 +11,10 @@ seen=0
 notes=0
 
 #
-# Prints the steps that the provision scripts have logged in the VM during
-# this boot and since the last call. Lima runs the scripts through cloud-init,
-# so their output is in its log file, after the line that marks the boot.
+# Prints the steps and the failures that the provision scripts have logged in
+# the VM during this boot and since the last call. Lima runs the scripts
+# through cloud-init, so their output is in its log file, after the line that
+# marks the boot.
 #
 function print_steps()
 {
@@ -22,7 +23,7 @@ function print_steps()
 	# shellcheck disable=SC2016
 	steps="$(guest sudo awk '
 		/^Cloud-init v.*running .init-local./ { n = 0 }
-		/^>>>/                                 { step[n++] = $0 }
+		/^(>>>|!!!)/                           { step[n++] = $0 }
 		END { for (i = 0; i < n; i++) print step[i] }
 	' /var/log/cloud-init-output.log 2>/dev/null)"
 	[[ -n "$steps" ]] || return 0
@@ -36,7 +37,7 @@ function print_steps()
 
 #
 # Prints what "task up" itself has logged since the last call: that it
-# restarts the VM for a new kernel.
+# saves a copy of the VM and restarts it.
 #
 function print_notes()
 {

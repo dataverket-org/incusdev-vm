@@ -4,10 +4,9 @@
 # once and the work goes on in the background: "task status" follows it.
 #
 # Lima runs provision/incus.sh and provision/ceph.sh in the VM on every start,
-# so the first start installs Incus and Ceph and takes about 7 minutes. It
-# ends with one restart, for the kernel that ceph.sh installs; while the VM is
-# stopped for that, a copy of it is saved for "task reset". Arguments go to
-# limactl when the VM is created:
+# so the first start installs Incus and Ceph and takes about 6 minutes. It
+# ends with one restart: the VM is stopped, and a copy of it is saved for
+# "task reset". Arguments go to limactl when the VM is created:
 #
 #   task up -- --cpus 4 --memory 8 --disk 40
 #
@@ -28,40 +27,25 @@ function platform_options()
 }
 
 #
-# Tells whether the VM runs the newest kernel that is installed in it. After
-# the first start it does not: provision/ceph.sh has installed a newer one.
-#
-function kernel_is_current()
-{
-	# shellcheck disable=SC2016
-	guest bash -c '[[ "$(ls /boot/vmlinuz-* | sort -V | tail -n 1)" == \
-		"/boot/vmlinuz-$(uname -r)" ]]'
-}
-
-#
 # Creates or starts the VM and waits for it. A new VM is stopped once after
-# the install: a copy of it is saved for "task reset", and the next start
-# runs the kernel that ceph.sh installed. A VM that exists is restarted only
-# when a newer kernel was installed. This is what runs in the background.
+# the install, and a copy of it is saved for "task reset". This is what runs
+# in the background.
 #
 function run()
 {
 	if vm_exists; then
 		limactl start --tty=false --timeout 20m "$name" || return $?
-		kernel_is_current && return
-
-		echo ">>> Restarting $name once, for the kernel that was installed ..."
-		limactl stop "$name" || return $?
-	else
-		# shellcheck disable=SC2046
-		limactl start --tty=false --timeout 20m --name "$name" \
-			$(platform_options) "$@" "$root/lima.yaml" || return $?
-
-		echo ">>> Saving a copy of $name for 'task reset', and restarting it ..."
-		limactl stop "$name" || return $?
-		limactl delete --force "$base" >/dev/null 2>&1
-		limactl clone --tty=false "$name" "$base" || return $?
+		return
 	fi
+
+	# shellcheck disable=SC2046
+	limactl start --tty=false --timeout 20m --name "$name" \
+		$(platform_options) "$@" "$root/lima.yaml" || return $?
+
+	echo ">>> Saving a copy of $name for 'task reset', and restarting it ..."
+	limactl stop "$name" || return $?
+	limactl delete --force "$base" >/dev/null 2>&1
+	limactl clone --tty=false "$name" "$base" || return $?
 
 	limactl start --tty=false --timeout 20m "$name" || return $?
 }
@@ -87,7 +71,7 @@ else
 		fail "/dev/kvm is missing or not writable!"
 	fi
 
-	doing="Creating $name in the background, about 7 minutes."
+	doing="Creating $name in the background, about 6 minutes."
 fi
 
 nohup "$0" --run "$@" > "$up_log" 2>&1 </dev/null &

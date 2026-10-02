@@ -49,13 +49,12 @@ Merge when `task check` ends with `All good on this computer too.`
 ## A new Ceph release
 
 Renovate proposes a new Ceph release only once Ceph has made a stable version
-of it. The pull request changes the image tag and nothing else: the install
-asks the cluster which release it is and takes the Ceph client from the
-Proxmox repository of that name.
+of it. The pull request changes the image tag and nothing else. The Ceph
+client stays Debian's, which is older than the cluster.
 
-Check it as any other: a new VM and `task check`. If Proxmox has no repository
-for the release yet, the install stops and says so. Then wait, and leave the
-pull request open.
+Check it as any other: a new VM and `task check`. A new release may drop the
+key type `aes` or what else the older client needs; then the install or the
+test fails, and the pull request stays open until the scripts are changed.
 
 ## What a version does not pin
 
@@ -66,7 +65,7 @@ installed is decided on the day of the install:
 |---|---|
 | The Ceph image tag, `v20` | the image behind that tag, which is rebuilt every week |
 | The Incus channel, `lts-7.0` | the newest build in that channel |
-| nothing | the newest kernel in trixie-backports, Ceph client and Debian packages |
+| nothing | the Ceph client and the other Debian packages of the day |
 
 So two VMs built from the same commit a week apart can differ, and no pull
 request says so. This is a choice. The Ceph image could be pinned to one
@@ -115,6 +114,5 @@ file from the repository.
 ## What nothing updates
 
 - **The tools in the Brewfile.** They are not pinned; `brew upgrade` is yours.
-- **The kernel from trixie-backports.** A new VM gets the newest one.
 - **Debian itself.** A move to the next release is a change to make by hand:
   the image in `lima.yaml`, the repositories in the scripts.

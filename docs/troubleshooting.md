@@ -20,9 +20,10 @@ In the Lima VM, put `limactl shell incusdev` in front of the commands.
 It tries the pool again every minute and finds it. Wait a minute or two;
 the end-to-end test waits for it.
 
-**The test says the kernel is too old.** `ceph.sh` installed Linux 7, and the
-machine still runs the old kernel. Reboot it. In the Lima VM, run `task down`
-and `task up`.
+**Ceph has four muted health checks.** `sudo ceph health detail` lists them
+as `(MUTED, STICKY)`; their names begin with `AUTH_INSECURE_`. They say that
+the cluster allows keys of the type `aes`. `ceph.sh` set that up and muted
+them, see below. `ceph health` says `HEALTH_OK` with them.
 
 **No `/dev/kvm`.** The install still works and Incus runs containers, but no
 virtual machines, and the test fails at its first step. On Linux, nested KVM
@@ -70,31 +71,30 @@ exists inside the container.
 **The Ceph dashboard on port 8444.** Its default is 8443, which Incus uses.
 Left alone, the dashboard module fails and puts Ceph in `HEALTH_ERR`.
 
-**The Ceph client from Proxmox.** The cluster is Ceph 20 (Tentacle). Debian
-13 ships Ceph 18. Proxmox publishes newer ones for trixie, for amd64 only, in
-a repository named after the release; on arm64 the scripts install Debian's
-client. The install asks the cluster for its release name and uses the
-repository of that name, so client and cluster always match.
+**Keys of the type `aes`.** The cluster is Ceph 20 (Tentacle), and makes its
+keys with the cipher `aes256k`. Debian 13 has the Ceph 18 client and Linux
+6.12: the client cannot read such a key, and the kernel's RBD client, which
+Incus maps images with, knows the cipher only from Linux 7.0 on. So `ceph.sh`
+allows the older cipher `aes` on the monitors, makes the admin key anew with
+it, and makes the key `client.incus` with it. Ceph calls that insecure and
+raises four health checks, one of them an error; `ceph.sh` mutes them. The
+cluster's own daemons keep their `aes256k` keys.
 
-**A saved copy for `task reset`.** A new VM is stopped once after the install,
-to start the new kernel. While it is stopped, `task up` clones it with
-`limactl clone`, as `incusdev-base`. That copy is never started. `task reset`
-deletes the VM and clones the copy again.
+**Not a newer kernel or client.** Linux 7 from trixie-backports and the
+Ceph 20 client that Proxmox publishes for Debian 13 would do without `aes`.
+But a Lima VM on Apple silicon that runs Linux 7.1 or newer cannot start
+virtual machines in Incus: they hang before their kernel starts. Linux 6.12
+can, and it needs `aes`. So every install uses `aes`, with Debian's own
+kernel and client, and is the same on both architectures.
 
-**Linux 7 from backports.** Ceph makes its keys with the cipher `aes256k`.
-The kernel's RBD client, which Incus maps images with, knows that cipher from
-Linux 7.0 on. Debian 13's kernel is 6.12; there `rbd map` fails with
-`Invalid argument` and the kernel logs `libceph: secret too big 32`. So
-`ceph.sh` installs the kernel from trixie-backports. The other way is to
-allow the old cipher `aes` on the monitors and make the key with
-`--key-type aes`; that works on 6.12, and leaves Ceph in `HEALTH_WARN` for
-good.
+**A saved copy for `task reset`.** A new VM is stopped once after the install.
+While it is stopped, `task up` clones it with `limactl clone`, as
+`incusdev-base`. That copy is never started. `task reset` deletes the VM and
+clones the copy again.
 
-**The scripts do not reboot.** A reboot in the middle of an install is a
-surprise on a host. `ceph.sh` finishes on the old kernel and says that a
-reboot is needed; `check.sh` refuses to run until it has happened. The start
-that `task up` begins restarts the Lima VM once, when the running kernel is
-not the newest one installed.
+**The bridge's subnet on macOS.** Incus picks a subnet for `incusbr0` that
+nothing answers on. In a Lima VM on macOS every address answers a ping, and
+Incus gives up. Then `incus.sh` creates the bridge with `10.158.42.1/24`.
 
 **The scripts wait for apt.** Right after a first boot, something else often
 runs `apt-get`. The scripts wait for it instead of failing on the lock.
@@ -106,11 +106,15 @@ instance.
 **Alpine virtual machines without secure boot.** Alpine's image is not signed
 for it: launch with `--config security.secureboot=false`.
 
-## Not tested yet
+## What is tested
 
-- macOS.
-- arm64, on macOS or Linux: Debian's Ceph 18 client against the Ceph 20
-  cluster, and the arm64 ceph-aio image.
+The Lima VM is tested on Linux x86_64 and on macOS with Apple silicon (M5,
+macOS 26): a new VM, `task check`, `task down` and `task up`, `task reset`
+and `task s3-credentials`.
 
-Everything else is tested on Linux x86_64: the Lima VM with `task check`, and
-the three scripts run by hand on a plain Debian 13 machine.
+Not tested:
+
+- `task dashboard` on macOS.
+- arm64 on Linux.
+- The three scripts run by hand on a plain Debian 13 machine, since they
+  changed to keys of the type `aes`.

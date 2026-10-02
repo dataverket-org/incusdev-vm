@@ -33,7 +33,7 @@ and 8000 must be free on `127.0.0.1`.
 ```sh
 brew bundle        # install the tools
 task up            # create the VM; returns at once, the install runs on
-task status        # follow the install: about 7 minutes, then the services
+task status        # follow the install: about 6 minutes, then the services
 task check         # run the end-to-end test: 1 to 2 minutes
 ```
 
@@ -68,7 +68,7 @@ Everything is kept: instances, images, the Ceph cluster and its data.
 
 To start over, `task reset` replaces the VM with a copy that `task up` saved
 right after the install. It takes about 30 seconds, where a new install takes
-7 minutes. The copy uses up to 6 GiB of disk; on a filesystem that can share
+6 minutes. The copy uses up to 6 GiB of disk; on a filesystem that can share
 blocks it uses almost none. `task destroy` followed by `task up` builds a new
 VM, and a new copy, from what is current.
 
@@ -86,16 +86,16 @@ On a Debian 13 host with `/dev/kvm`, 2 CPUs and 4 GiB of memory or more:
 ```sh
 sudo provision/incus.sh     # Incus, its network, local pool and profiles
 sudo provision/ceph.sh      # Ceph in Podman, its client, keys and the ceph pool
-sudo reboot                 # once: ceph.sh installed a newer kernel
 sudo provision/check.sh     # the end-to-end test
 ```
 
 The scripts can run again; they only change what is missing. The user who
 calls `sudo` gets the `incus-admin` group and runs the Ceph container.
 
-`ceph.sh` installs Linux 7 from trixie-backports, because Debian 13's own
-kernel cannot use Ceph's keys. The scripts never reboot the machine; you do,
-once. In the Lima VM, `task up` does that restart for you.
+The Ceph cluster is newer than Debian 13's Ceph client and kernel. `ceph.sh`
+lets the cluster use keys of the older type `aes`, which both know, and mutes
+the health checks that Ceph raises about it.
+[docs/troubleshooting.md](docs/troubleshooting.md) says why.
 
 On a host, the three services listen on all of its addresses, not only on
 `127.0.0.1`. The Ceph dashboard has a password that everyone knows, so keep

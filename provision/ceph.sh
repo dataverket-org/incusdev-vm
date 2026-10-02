@@ -6,8 +6,9 @@
 #
 #   sudo provision/ceph.sh
 #
-# It installs Linux 7 from trixie-backports, which the kernel needs to use
-# Ceph's keys. Reboot the machine afterwards when the script says so.
+# The cluster is newer than Debian 13's Ceph client and kernel, which only
+# know keys of the older type aes. So the script lets the cluster use that
+# type, and makes the keys of this machine with it.
 #
 # Lima runs it too, see lima.yaml. It can run again: every step checks before
 # it changes anything. Settings, from the environment:
@@ -29,6 +30,11 @@ user="${INCUSDEV_USER:-${SUDO_USER:-$(getent passwd |
 uid="$(id -u "$user")"
 
 container="ceph-dev"
+
+# The health checks that Ceph raises once keys of the type aes are allowed.
+# They are what this setup is, so they are muted.
+aes_checks="AUTH_INSECURE_CLIENT_KEY_TYPE AUTH_INSECURE_KEYS_ALLOWED
+	AUTH_INSECURE_KEYS_CREATABLE AUTH_INSECURE_SERVICE_TICKETS"
 
 #
 # Prints a log message.
@@ -81,50 +87,6 @@ function apt_get()
 	done
 
 	apt-get -q -o DPkg::Lock::Timeout=300 "$@" || return $?
-}
-
-#
-# Tells whether the running kernel can use Ceph's keys. Ceph makes keys of
-# the type aes256k, which the kernel's RBD client knows from Linux 7.0 on.
-# Debian 13 comes with Linux 6.12.
-#
-function kernel_is_new()
-{
-	local release
-
-	release="$(uname -r)"
-	(( ${release%%.*} >= 7 ))
-}
-
-#
-# Installs the kernel from trixie-backports, unless the running or an
-# installed kernel is new enough. It counts from the next boot.
-#
-function install_kernel()
-{
-	local package codename
-
-	kernel_is_new && return
-	compgen -G "/boot/vmlinuz-[7-9].*" >/dev/null && return
-
-	package="linux-image-$(dpkg --print-architecture)"         || return $?
-	codename="$(. /etc/os-release && echo "$VERSION_CODENAME")" || return $?
-
-	log "Installing Linux 7 from $codename-backports ..."
-	apt_get update || return $?
-
-	if ! apt-cache policy | grep -q "$codename-backports"; then
-		cat > /etc/apt/sources.list.d/backports.sources <<EOF || return $?
-Types: deb
-URIs: http://deb.debian.org/debian
-Suites: $codename-backports
-Components: main
-Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
-EOF
-		apt_get update || return $?
-	fi
-
-	apt_get install -y -t "$codename-backports" "$package" || return $?
 }
 
 #
@@ -195,52 +157,36 @@ function wait_for_ceph()
 }
 
 #
-# Installs the Ceph client of the cluster's release. Debian 13 ships Ceph 18;
-# Proxmox publishes newer ones for trixie, for amd64 only, in a repository
-# named after the release. The cluster says which release it is, so a newer
-# image brings its own client along.
+# Installs Debian's Ceph client.
 #
 function install_ceph_client()
 {
 	command -v ceph >/dev/null && return
 
-	local keyring="/usr/share/keyrings/proxmox-archive-keyring.gpg"
-	local proxmox="download.proxmox.com/debian"
-	local release repository
-
-	if [[ "$(dpkg --print-architecture)" != "amd64" ]]; then
-		echo "*** No Proxmox packages for this architecture," \
-			"using Debian's Ceph client." >&2
-		apt_get install -y ceph-common || return $?
-		return
-	fi
-
-	# "ceph version 20.2.4 (7f79...) tentacle (stable)"
-	release="$(in_container ceph --version | awk '{ print $5 }')" || return $?
-	repository="ceph-$release"
-
-	if ! curl -fsSL -o /dev/null \
-	     "http://$proxmox/$repository/dists/trixie/InRelease"; then
-		echo "!!! Proxmox has no repository $repository for trixie:" \
-			"no client for this Ceph release." >&2
-		return 1
-	fi
-
-	log "Adding the Proxmox repository $repository ..."
-	curl -fsSL -o "$keyring" \
-		"https://enterprise.proxmox.com/debian/proxmox-archive-keyring-trixie.gpg" ||
-		return $?
-	cat > /etc/apt/sources.list.d/ceph.sources <<EOF || return $?
-Types: deb
-URIs: http://$proxmox/$repository
-Suites: trixie
-Components: no-subscription
-Signed-By: $keyring
-EOF
-	apt_get update || return $?
-
 	log "Installing the Ceph client ..."
 	apt_get install -y ceph-common || return $?
+}
+
+#
+# Lets the cluster use keys and tickets of the type aes, next to its own
+# type aes256k. The monitors apply the change a moment later.
+#
+function allow_aes()
+{
+	local tries=12
+
+	in_container ceph mon dump 2>/dev/null |
+		grep -q "^auth_service_cipher aes$" && return
+
+	log "Allowing Ceph keys of the type aes ..."
+	in_container ceph mon set auth_allowed_ciphers aes,aes256k || return $?
+	in_container ceph mon set auth_service_cipher aes          || return $?
+
+	until in_container ceph mon dump 2>/dev/null |
+	      grep -q "^auth_service_cipher aes$"; do
+		(( tries-- > 0 )) || return 1
+		sleep 5
+	done
 }
 
 #
@@ -253,23 +199,50 @@ function load_rbd()
 }
 
 #
-# Copies the cluster's configuration and admin keyring out of the container.
-# The configuration is copied on every run, since it names the monitor's
-# address.
+# Copies the cluster's configuration out of the container, and gives this
+# machine the admin key. The configuration is copied on every run, since it
+# names the monitor's address.
+#
+# The cluster made its admin key with the type aes256k. The key is made anew
+# with the type aes, once, and the container gets the new one too. Right
+# after allow_aes the cluster may still refuse the type, so this tries for a
+# minute.
 #
 function configure_ceph_client()
 {
 	local conf="/etc/ceph/ceph.conf"
 	local keyring="/etc/ceph/ceph.client.admin.keyring"
+	local tries=12
 
 	mkdir -p /etc/ceph || return $?
 	in_container cat /etc/ceph/ceph.conf > "$conf.new" || return $?
 	install -m 644 "$conf.new" "$conf" || return $?
 	rm -f "$conf.new"
 
-	( umask 077 && in_container ceph auth get client.admin \
-		> "$keyring" 2>/dev/null ) || return $?
+	if ! ceph -s >/dev/null 2>&1; then
+		log "Making the Ceph admin key anew, with the type aes ..."
+		until ( umask 077 && in_container ceph auth rotate client.admin \
+			--key_type aes > "$keyring" 2>/dev/null ); do
+			(( tries-- > 0 )) || return 1
+			sleep 5
+		done
+		in_container tee /etc/ceph/ceph.client.admin.keyring \
+			< "$keyring" >/dev/null || return $?
+	fi
+
 	ceph -s >/dev/null || return $?
+}
+
+#
+# Mutes the health checks about keys of the type aes, for good.
+#
+function mute_aes_checks()
+{
+	local check
+
+	for check in $aes_checks; do
+		ceph health mute "$check" --sticky >/dev/null || return $?
+	done
 }
 
 #
@@ -325,8 +298,8 @@ function create_incus_key()
 
 	log "Creating the Ceph key client.incus ..."
 	( umask 077 && ceph auth get-or-create client.incus \
-		mon "allow *" osd "allow *" mgr "allow *" -o "$keyring" ) ||
-		return $?
+		mon "allow *" osd "allow *" mgr "allow *" \
+		--key_type aes -o "$keyring" ) || return $?
 	ceph --id incus -s >/dev/null || return $?
 }
 
@@ -354,18 +327,17 @@ function configure_incus_storage()
 }
 
 [[ $EUID -eq 0 ]]       || fail "Run this as root!"
-install_kernel          || fail "Installing the kernel failed!"
 install_podman          || fail "Installing Podman failed!"
 start_ceph              || fail "Starting the Ceph container failed!"
 wait_for_ceph           || fail "Ceph did not come up!"
 install_ceph_client     || fail "Installing the Ceph client failed!"
+allow_aes               || fail "Allowing keys of the type aes failed!"
 load_rbd                || fail "Loading the rbd module failed!"
 configure_ceph_client   || fail "Configuring the Ceph client failed!"
+mute_aes_checks         || fail "Muting the health checks failed!"
 move_dashboard          || fail "Moving the Ceph dashboard failed!"
 create_s3_users         || fail "Creating the S3 users failed!"
 create_incus_key        || fail "Creating the client.incus key failed!"
 configure_incus_storage || fail "Creating the ceph storage pool failed!"
 
 log "Ceph is ready."
-kernel_is_new ||
-	log "Reboot this machine: Incus needs the new kernel to use Ceph."

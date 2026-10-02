@@ -5,7 +5,7 @@
 #
 #   sudo provision/check.sh
 #
-# It checks the kernel, KVM, Ceph, the kernel mapping an RBD image, an Incus
+# It checks KVM, Ceph, the kernel mapping an RBD image, an Incus
 # virtual machine that boots from the ceph pool and gets an address, and the
 # three service ports. It removes what it makes. It force-deletes an instance
 # named incusdev-check, so do not use that name yourself.
@@ -32,18 +32,6 @@ function fail()
 {
 	echo "!!! $1" >&2
 	exit 1
-}
-
-#
-# Checks that the running kernel can use Ceph's keys, which takes Linux 7.0.
-# ceph.sh installs such a kernel, and it counts after a reboot.
-#
-function check_kernel()
-{
-	local release
-
-	release="$(uname -r)"
-	(( ${release%%.*} >= 7 ))
 }
 
 #
@@ -197,8 +185,6 @@ function check_services()
 command -v incus >/dev/null || fail "Incus is not installed: run incus.sh!"
 command -v ceph >/dev/null  || fail "Ceph is not installed: run ceph.sh!"
 
-log "Checking the kernel ..."
-check_kernel       || fail "Linux $(uname -r) is too old for Ceph: reboot!"
 log "Checking KVM ..."
 check_kvm          || fail "No KVM here: Incus cannot run virtual machines!"
 log "Checking Ceph ..."
