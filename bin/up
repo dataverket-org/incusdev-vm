@@ -10,8 +10,8 @@
 #
 #   task up -- --cpus 4 --memory 8 --disk 40
 #
-# With INCUS_SRC set, a new VM gets that directory mounted read-only, at the
-# same path, for "task dev".
+# With INCUS_SRC set, a new VM gets that directory mounted, writable and at
+# the same path.
 #
 
 source "${0%/*}/functions.sh" || exit $?
@@ -43,7 +43,7 @@ function run()
 
 	# shellcheck disable=SC2046
 	limactl start --tty=false --timeout 20m --name "$name" \
-		$(platform_options) ${incus_src:+--mount "$incus_src"} \
+		$(platform_options) ${incus_src:+--mount "$incus_src:w"} \
 		"$@" "$root/lima.yaml" || return $?
 
 	echo ">>> Saving a copy of $name for 'task reset', and restarting it ..."

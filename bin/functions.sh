@@ -4,8 +4,8 @@ root="${BASH_SOURCE[0]%/*}/.."
 # The stopped copy of the freshly installed VM that "task reset" starts from.
 base="$name-base"
 
-# The Incus source tree on this computer, for "task dev". "task up" mounts it
-# into a new VM, read-only and at the same path.
+# An Incus source tree on this computer. "task up" mounts it into a new VM,
+# writable and at the same path: see "Work on Incus itself" in README.md.
 incus_src="${INCUS_SRC:-}"
 
 # Where "task up" keeps the output and the process ID of its background work.
