@@ -31,7 +31,10 @@ containerd:
 #
 # The boot step makes incus-admin a default group for new users, before Lima
 # creates the VM's user: a group that incus.sh adds would only count after a
-# restart.
+# restart. It also gives root its id ranges for Incus's containers before the
+# package starts the daemon, which reads /etc/subuid only then; left to the
+# package, the range may land elsewhere when the VM's user already holds the
+# default one, and containers then fail to map their ids.
 provision:
 - mode: boot
   script: |
@@ -39,6 +42,8 @@ provision:
     getent passwd "{{.User}}" >/dev/null && exit 0
     groupadd --system incus-admin
     echo "GROUPS=incus-admin" >> /etc/default/useradd
+    getsubids root >/dev/null 2>&1 || echo "root:1000000:1000000000" >> /etc/subuid
+    getsubids -g root >/dev/null 2>&1 || echo "root:1000000:1000000000" >> /etc/subgid
 - mode: system
   file: provision/incus.sh
 - mode: system
