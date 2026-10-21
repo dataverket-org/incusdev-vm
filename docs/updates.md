@@ -24,8 +24,9 @@ Renovate has to be running against the repository for any of this to happen.
 
 ## Check a pull request
 
-Nothing tests a pull request by itself: the test needs a machine with nested
-virtualization. Do it by hand, on the branch of the pull request.
+Nothing tests a pull request by itself: the test needs a machine, and with
+`-- --vm` one with nested virtualization. Do it by hand, on the branch of
+the pull request.
 
 For the Debian image, Incus or Ceph, build a new VM:
 

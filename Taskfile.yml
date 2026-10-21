@@ -20,10 +20,10 @@ tasks:
       - bin/status
 
   check:
-    desc: Run the end-to-end test
+    desc: "Run the end-to-end test with a container; -- --vm with a virtual machine, which needs nested virtualization"
     silent: true
     cmds:
-      - bin/check
+      - bin/check {{.CLI_ARGS}}
 
   dashboard:
     desc: "Open both dashboards in the browser. One of them: task dashboard -- incus, or -- ceph"

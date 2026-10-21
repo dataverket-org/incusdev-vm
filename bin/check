@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
 #
 # Runs the end-to-end test: provision/check.sh inside the VM, then the
-# services through the port forwards on this computer.
+# services through the port forwards on this computer. The test launches
+# a container; with --vm it launches a virtual machine instead, which
+# needs nested virtualization:
+#
+#   task check -- --vm
 #
 
 source "${0%/*}/functions.sh" || exit $?
 
 check_running || exit $?
 
-# The script travels as an argument, since stdin is closed in the VM.
-guest sudo bash -c "$(< "$root/provision/check.sh")" ||
+# The script travels as an argument, since stdin is closed in the VM, and
+# our arguments after it.
+guest sudo bash -c "$(< "$root/provision/check.sh")" bash "$@" ||
 	fail "The test failed inside $name!"
 
 print_services | tee /dev/stderr | grep -q " down " &&

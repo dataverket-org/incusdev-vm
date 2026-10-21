@@ -21,11 +21,16 @@ them in a VM on your computer.
 
 ## In a VM on your computer
 
-You need [Homebrew](https://brew.sh) and a computer that can run a virtual
-machine inside a virtual machine:
+You need [Homebrew](https://brew.sh) and a computer that runs a virtual
+machine: Linux with `/dev/kvm`, or a Mac with Apple silicon. For Incus to
+run virtual machines inside that VM as well, and not only containers, the
+VM needs nested virtualization:
 
-- Linux with `/dev/kvm` and nested KVM on, or
+- Linux with nested KVM on, or
 - a Mac with Apple silicon M3 or newer, on macOS 15 or newer.
+
+The test uses a container, so it passes without; `task check -- --vm`
+asks for a virtual machine.
 
 The VM takes 2 CPUs, 2 GiB of memory and a 20 GiB disk. The ports 26870,
 26871 and 26872 must be free on `127.0.0.1`: a block nothing well-known
@@ -55,7 +60,7 @@ services and whether each one answers:
 |---|---|
 | `task up` | Create the VM, or start it, in the background |
 | `task status` | Show the VM and its services; while it starts, follow the steps |
-| `task check` | Run the end-to-end test |
+| `task check` | Run the end-to-end test, with a container; `-- --vm` launches a virtual machine instead, which needs nested virtualization |
 | `task dashboard` | Open the Incus web UI, logged in, and the Ceph dashboard, and print its password. One of them: `-- incus` or `-- ceph` |
 | `task s3-credentials` | Print the S3 endpoint and keys; `-- admin` for the RadosGW admin user |
 | `task reset` | Put the VM back to how it was right after the install |

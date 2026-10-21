@@ -5,10 +5,14 @@
 #
 #   sudo provision/check.sh
 #
-# It checks KVM, Ceph, the kernel mapping an RBD image, an Incus virtual
-# machine that boots from the ceph pool and gets an address, and the three
-# service ports. It removes what it makes, and force-deletes any instance
-# named incusdev-check.
+# It checks Ceph, the kernel mapping an RBD image, an Incus instance that
+# boots from the ceph pool and gets an address, and the three service
+# ports. The instance is a container, which needs no nested
+# virtualization; with --vm it is a virtual machine, and KVM is checked
+# first. It removes what it makes, and force-deletes any instance named
+# incusdev-check.
+#
+#   sudo provision/check.sh --vm
 #
 
 export HOME=/root
@@ -16,6 +20,7 @@ export HOME=/root
 instance="incusdev-check"
 image="images:alpine/3.21"
 rbd_image="incus/incusdev-check"
+mode="container"
 
 #
 # Prints a log message.
@@ -41,6 +46,14 @@ function check_kvm()
 {
 	[[ -e /dev/kvm ]] || return 1
 	incus info </dev/null | grep -q 'driver:.*qemu' || return $?
+}
+
+#
+# Checks that Incus found LXC, which runs the containers.
+#
+function check_lxc()
+{
+	incus info </dev/null | grep -q 'driver:.*lxc' || return $?
 }
 
 #
@@ -92,19 +105,23 @@ function wait_for_pool()
 }
 
 #
-# Launches a virtual machine with its root disk on Ceph.
+# Launches the instance with its root disk on Ceph: a container, or with
+# --vm a virtual machine, without secure boot since the image is unsigned.
 #
 function launch_instance()
 {
+	local options=()
+
+	[[ "$mode" == vm ]] &&
+		options=(--vm --config security.secureboot=false)
 	incus delete --force "$instance" </dev/null >/dev/null 2>&1
-	incus launch --quiet "$image" "$instance" --vm \
-		--profile default --profile root-ceph \
-		--config security.secureboot=false </dev/null || return $?
+	incus launch --quiet "$image" "$instance" "${options[@]}" \
+		--profile default --profile root-ceph </dev/null || return $?
 }
 
 #
-# Waits until the agent inside the virtual machine answers and the machine
-# has an IPv4 address from the bridge.
+# Waits until the instance answers an exec, which for a virtual machine
+# means its agent is up, and has an IPv4 address from the bridge.
 #
 function wait_for_instance()
 {
@@ -120,8 +137,9 @@ function wait_for_instance()
 }
 
 #
-# Checks that the running virtual machine's disks are RBD images mapped by
-# the kernel, and that its configuration volume is mounted from one.
+# Checks that the running instance's disk is an RBD image mapped by the
+# kernel and mounted from it: a container's root, or a virtual machine's
+# configuration volume beside its root disk.
 #
 function check_instance_rbd()
 {
@@ -196,19 +214,31 @@ function check_services()
 	check_signed incusdev       "$admin" 403               || return $?
 }
 
+for arg in "$@"; do
+	case "$arg" in
+		--vm)	mode="vm" ;;
+		*)	fail "check.sh: unknown argument $arg; the one option is --vm" ;;
+	esac
+done
+
 [[ $EUID -eq 0 ]] || fail "Run this as root!"
 command -v incus >/dev/null || fail "Incus is not installed: run incus.sh!"
 command -v ceph >/dev/null  || fail "Ceph is not installed: run ceph.sh!"
 
-log "Checking KVM ..."
-check_kvm          || fail "No KVM here: Incus cannot run virtual machines!"
+if [[ "$mode" == vm ]]; then
+	log "Checking KVM ..."
+	check_kvm || fail "No KVM here: Incus cannot run virtual machines! Without --vm the test uses a container."
+else
+	log "Checking that Incus runs containers ..."
+	check_lxc || fail "Incus has no LXC driver!"
+fi
 log "Checking Ceph ..."
 check_ceph         || fail "Ceph does not answer client.incus, or has errors!"
 log "Mapping an RBD image with the kernel ..."
 check_rbd_map      || fail "The kernel cannot map an RBD image!"
 log "Waiting for the ceph pool in Incus ..."
 wait_for_pool      || fail "Incus does not have the ceph pool!"
-log "Launching $instance from $image on the ceph pool ..."
+log "Launching $instance from $image on the ceph pool, as a ${mode/vm/virtual machine} ..."
 launch_instance    || fail "Launching $instance failed!"
 wait_for_instance  || fail "$instance did not come up!"
 log "Checking the RBD images behind $instance ..."

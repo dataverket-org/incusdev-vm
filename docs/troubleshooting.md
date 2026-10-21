@@ -32,8 +32,9 @@ the cluster allows keys of the type `aes`. `ceph.sh` set that up and muted
 them, see below. `ceph health` says `HEALTH_OK` with them.
 
 **No `/dev/kvm`.** The install still works and Incus runs containers, but no
-virtual machines, and the test fails at its first step. On Linux, nested KVM
-must be on for a VM to have it:
+virtual machines: `task check` passes, since it launches a container, and
+`task check -- --vm` fails at its first step. On Linux, nested KVM must be
+on for a VM to have it:
 
 ```sh
 cat /sys/module/kvm_*/parameters/nested    # 1 or Y
@@ -120,9 +121,9 @@ for it: launch with `--config security.secureboot=false`.
 ## What is tested
 
 The Lima VM is tested on Linux x86_64 and on macOS with Apple silicon (M5,
-macOS 26): a new VM, `task check`, `task down` and `task up`, `task reset`
-and `task s3-credentials`. `task check` logs in to the Ceph dashboard with
-its password.
+macOS 26): a new VM, `task check` with a container and with `-- --vm`,
+`task down` and `task up`, `task reset` and `task s3-credentials`.
+`task check` logs in to the Ceph dashboard with its password.
 
 Not tested:
 
