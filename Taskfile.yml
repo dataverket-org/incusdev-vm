@@ -8,37 +8,37 @@ tasks:
       - task --list
 
   up:
-    desc: Create the VM, or start it, in the background. Follow it with task status
+    desc: "Create the VM, or start it; task status follows"
     silent: true
     cmds:
       - bin/up {{.CLI_ARGS}}
 
   status:
-    desc: Show the VM and its services, and follow a start while it is at work
+    desc: "The VM and its services; follows a start"
     silent: true
     cmds:
       - bin/status
 
   check:
-    desc: "Run the end-to-end test with a container; -- --vm with a virtual machine, which needs nested virtualization"
+    desc: "End-to-end test with a container; -- --vm: a VM"
     silent: true
     cmds:
       - bin/check {{.CLI_ARGS}}
 
   dashboard:
-    desc: "Open both dashboards in the browser. One of them: task dashboard -- incus, or -- ceph"
+    desc: "Open the dashboards; one: -- incus or -- ceph"
     silent: true
     cmds:
       - bin/dash {{.CLI_ARGS}}
 
   s3-credentials:
-    desc: "Print the S3 endpoint and keys as environment variables. For the RadosGW admin user: task s3-credentials -- admin"
+    desc: "S3 endpoint and keys as env vars; -- admin too"
     silent: true
     cmds:
       - bin/s3-credentials {{.CLI_ARGS}}
 
   reset:
-    desc: Put the VM back to how it was right after the install, in about 30 seconds
+    desc: "The VM as right after the install, in 30 s"
     prompt: Replace the VM with the saved copy? Everything made in it is lost.
     silent: true
     cmds:
@@ -51,14 +51,14 @@ tasks:
       - bin/down
 
   destroy:
-    desc: Delete the VM, everything in it, and the saved copy
+    desc: "Delete the VM, everything in it, the saved copy"
     prompt: Delete the VM and everything in it?
     silent: true
     cmds:
       - bin/destroy
 
   lint:
-    desc: Run shellcheck on the scripts and validate lima.yaml
+    desc: "shellcheck on the scripts, validate lima.yaml"
     cmds:
       - shellcheck -s bash -e SC2034,SC2154,SC1090,SC1091,SC2242 bin/* provision/*.sh
       - limactl validate lima.yaml
