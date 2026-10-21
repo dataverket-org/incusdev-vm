@@ -49,16 +49,19 @@ provision:
 - mode: system
   file: provision/ceph.sh
 
-# The services reachable from the host, all on 127.0.0.1 and on the same port
-# as in the VM. Nothing else is forwarded. print_services in bin/functions.sh
-# lists the same ports; keep the two in step.
+# The services reachable from the host, all on 127.0.0.1, in a block of
+# ports from 26870 that nothing well-known uses and that the ephemeral
+# ranges of Linux and macOS leave alone; inside the VM they keep their own
+# ports, which a Debian host without Lima offers as they are. Nothing else
+# is forwarded. print_services in bin/functions.sh lists the same ports;
+# keep the two in step.
 portForwards:
 - guestPort: 8443   # Incus API and web UI
-  hostPort: 8443
+  hostPort: 26870
 - guestPort: 8444   # Ceph dashboard
-  hostPort: 8444
+  hostPort: 26871
 - guestPort: 8000   # S3 API, the Ceph object gateway
-  hostPort: 8000
+  hostPort: 26872
 - guestIP: "0.0.0.0"
   guestIPMustBeZero: false
   guestPortRange: [1, 65535]

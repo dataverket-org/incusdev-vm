@@ -14,7 +14,7 @@ flowchart TB
         browser["Browser"]
         cli["incus client"]
         s3c["S3 client"]
-        fwd["Port forwards<br/>127.0.0.1 : 8443, 8444, 8000"]
+        fwd["Port forwards<br/>127.0.0.1 : 26870, 26871, 26872"]
     end
 
     internet(("Internet"))
@@ -41,9 +41,9 @@ flowchart TB
     cli --> fwd
     s3c --> fwd
 
-    fwd -- "8443 HTTPS" --> incusd
-    fwd -- "8444 HTTPS" --> mgr
-    fwd -- "8000 HTTP" --> rgw
+    fwd -- "26870 → 8443 HTTPS" --> incusd
+    fwd -- "26871 → 8444 HTTPS" --> mgr
+    fwd -- "26872 → 8000 HTTP" --> rgw
 
     incusd -- "starts and stops" --> guestvm
     incusd -- "starts and stops" --> guestct
@@ -77,9 +77,9 @@ monitor would advertise an address that only exists inside the container.
 
 | Port | Listens on | Service | Reachable from the host |
 |---|---|---|---|
-| 8443 | all VM addresses | Incus API and web UI (`/ui/`) | yes, `https://127.0.0.1:8443` |
-| 8444 | all VM addresses | Ceph dashboard | yes, `https://127.0.0.1:8444` |
-| 8000 | all VM addresses | S3 API of the Ceph object gateway (RadosGW), and the RadosGW admin API under `/admin` | yes, `http://127.0.0.1:8000` |
+| 8443 | all VM addresses | Incus API and web UI (`/ui/`) | yes, `https://127.0.0.1:26870` |
+| 8444 | all VM addresses | Ceph dashboard | yes, `https://127.0.0.1:26871` |
+| 8000 | all VM addresses | S3 API of the Ceph object gateway (RadosGW), and the RadosGW admin API under `/admin` | yes, `http://127.0.0.1:26872` |
 | 3300, 6789 | `192.168.5.15` | Ceph monitor, protocol v2 and v1 | no |
 | 6800-6811 | `192.168.5.15` | Ceph OSD, manager and metadata server | no |
 | 53, 67 | `incusbr0` | DNS and DHCP for instances | no |

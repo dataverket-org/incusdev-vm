@@ -12,12 +12,12 @@ them in a VM on your computer.
 - Two Incus storage pools: `default` on local disk and `ceph` on RBD.
 - These services:
 
-| Service | Port | Login |
-|---|---|---|
-| Incus API and web UI | 8443 | a client certificate |
-| Ceph dashboard | 8444 | `admin` and a password made at install |
-| S3 API | 8000 | keys of the user `incusdev` |
-| RadosGW admin API, under `/admin` | 8000 | keys of the user `incusdev-admin` |
+| Service | Port on a Debian host | On your computer, with Lima | Login |
+|---|---|---|---|
+| Incus API and web UI | 8443 | `127.0.0.1:26870` | a client certificate |
+| Ceph dashboard | 8444 | `127.0.0.1:26871` | `admin` and a password made at install |
+| S3 API | 8000 | `127.0.0.1:26872` | keys of the user `incusdev` |
+| RadosGW admin API, under `/admin` | 8000 | `127.0.0.1:26872` | keys of the user `incusdev-admin` |
 
 ## In a VM on your computer
 
@@ -27,8 +27,9 @@ machine inside a virtual machine:
 - Linux with `/dev/kvm` and nested KVM on, or
 - a Mac with Apple silicon M3 or newer, on macOS 15 or newer.
 
-The VM takes 2 CPUs, 2 GiB of memory and a 20 GiB disk. The ports 8443, 8444
-and 8000 must be free on `127.0.0.1`.
+The VM takes 2 CPUs, 2 GiB of memory and a 20 GiB disk. The ports 26870,
+26871 and 26872 must be free on `127.0.0.1`: a block nothing well-known
+uses, which is why the VM's own 8443, 8444 and 8000 are not what you reach.
 
 ```sh
 brew bundle        # install the tools
@@ -43,11 +44,11 @@ services and whether each one answers:
 
 ```
 >>> Services on this computer:
-  Incus API          https://127.0.0.1:8443      up    task dashboard adds the incus remote
-  Incus web UI       https://127.0.0.1:8443/ui/  up    task dashboard -- incus
-  Ceph dashboard     https://127.0.0.1:8444      up    task dashboard -- ceph
-  S3 API             http://127.0.0.1:8000       up    task s3-credentials
-  RadosGW admin API  http://127.0.0.1:8000/admin up    task s3-credentials -- admin
+  Incus API          https://127.0.0.1:26870     up    task dashboard adds the incus remote
+  Incus web UI       https://127.0.0.1:26870/ui/ up    task dashboard -- incus
+  Ceph dashboard     https://127.0.0.1:26871     up    task dashboard -- ceph
+  S3 API             http://127.0.0.1:26872      up    task s3-credentials
+  RadosGW admin API  http://127.0.0.1:26872/admin up   task s3-credentials -- admin
 ```
 
 | Task | What it does |

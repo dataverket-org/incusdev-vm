@@ -7,7 +7,7 @@
 
 source "${0%/*}/functions.sh" || exit $?
 
-url="https://127.0.0.1:8444/"
+url="https://127.0.0.1:26871/"
 
 case "$(uname -s)" in
 	Darwin)	opener="open" ;;

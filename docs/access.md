@@ -52,7 +52,7 @@ limactl shell incusdev incus list
 
 ## Ceph dashboard
 
-`task dashboard -- ceph` opens `https://127.0.0.1:8444` and prints the
+`task dashboard -- ceph` opens `https://127.0.0.1:26871` and prints the
 password; a URL cannot carry that login. Log in as `admin`. The install makes
 the password, in place of the one the ceph-aio image comes with, and keeps it
 in the VM:
@@ -120,7 +120,8 @@ Operations".
 
 ## A port is already in use
 
-With Lima, the ports 8443, 8444 and 8000 must be free on `127.0.0.1`. If
-another program holds one, Lima cannot forward it, and `task status` lists the
-service as `down` or shows the other program. Stop that program and run
-`task down` and `task up`.
+With Lima, the ports 26870, 26871 and 26872 must be free on `127.0.0.1`.
+They are forwarded to the VM's 8443, 8444 and 8000, and were chosen because
+nothing well-known uses them. If another program holds one, Lima cannot
+forward it, and `task status` lists the service as `down` or shows the other
+program. Stop that program and run `task down` and `task up`.

@@ -53,7 +53,7 @@ function ensure_remote()
 	fi
 
 	token="$(trust_token "$name-host")" || return $?
-	incus remote add "$name" https://127.0.0.1:8443 --accept-certificate \
+	incus remote add "$name" https://127.0.0.1:26870 --accept-certificate \
 		--token "$token" </dev/null || return $?
 }
 
