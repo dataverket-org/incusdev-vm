@@ -4,7 +4,7 @@
 # Ceph, are kept.
 #
 
-source "${0%/*}/functions.sh" || exit $?
+source "${0%/*}/../share/incusdev-vm/incusdev-vm.sh" || exit $?
 
 # Ends the web UI session of bin/dash-incus, if there is one.
 pkill -f "incus webui $name:"
@@ -18,7 +18,7 @@ if vm_runs; then
 	limactl stop "$name" >/dev/null 2>&1 || fail "Stopping $name failed!"
 fi
 
-if tor_runs; then
+if vm_runs "$tor"; then
 	log "Stopping $tor ..."
 	limactl stop "$tor" >/dev/null 2>&1 || fail "Stopping $tor failed!"
 fi

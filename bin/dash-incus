@@ -8,7 +8,7 @@
 # background, since the page works through it. "task down" ends it.
 #
 
-source "${0%/*}/functions.sh" || exit $?
+source "${0%/*}/../share/incusdev-vm/incusdev-vm.sh" || exit $?
 
 #
 # Prints a one-time token for a client of the given name, after removing the

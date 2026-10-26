@@ -21,7 +21,7 @@
 #   task up -- --tor
 #
 
-source "${0%/*}/functions.sh" || exit $?
+source "${0%/*}/../share/incusdev-vm/incusdev-vm.sh" || exit $?
 
 #
 # Prints the limactl options for this platform: the Virtualization framework
@@ -41,23 +41,24 @@ function platform_options()
 #
 function start_tor()
 {
-	if tor_exists; then
-		tor_runs && return
-		echo ">>> Starting $tor, the ToR ..."
+	vm_runs "$tor" && return
+
+	if vm_exists "$tor"; then
+		log "Starting $tor, the ToR ..."
 		limactl start --tty=false --timeout 10m "$tor" || return $?
 		return
 	fi
 
-	echo ">>> Creating $tor, the ToR ..."
+	log "Creating $tor, the ToR ..."
 	limactl start --tty=false --timeout 10m --name "$tor" --vm-type=vz \
 		--network "lima:$p2p_network_tor" "$root/tor.yaml" || return $?
 }
 
 #
 # Creates or starts the VM and waits for it. A new VM is stopped once after
-# the install, and a copy of it is saved for "task reset". With --tor first,
-# the ToR starts before it, and a new VM gets the link to it. This is what
-# runs in the background.
+# the install, and a copy of it is saved for "task reset". With a ToR, the
+# ToR starts first, and a new VM gets the link to it. This is what runs in
+# the background.
 #
 # One after the other, not side by side: each limactl start stops the
 # socket_vmnet daemons that no VM uses, and a VM being created does not
@@ -65,28 +66,13 @@ function start_tor()
 #
 function run()
 {
-	if [[ "${1:-}" == "--tor" ]]; then
+	if [[ -n "$with_tor" ]]; then
 		start_tor || return $?
 	fi
 
-	run_vm "$@" || return $?
-}
-
-#
-# Creates or starts incusdev itself, for run. With --tor first, a new VM
-# gets the link to the ToR.
-#
-function run_vm()
-{
-	local network=""
-
-	if [[ "${1:-}" == "--tor" ]]; then
-		shift
-		network="lima:$p2p_network"
-	fi
+	vm_runs && return
 
 	if vm_exists; then
-		vm_runs && return
 		limactl start --tty=false --timeout 20m "$name" || return $?
 		return
 	fi
@@ -94,9 +80,10 @@ function run_vm()
 	# shellcheck disable=SC2046
 	limactl start --tty=false --timeout 20m --name "$name" \
 		$(platform_options) ${incus_src:+--mount "$incus_src:w"} \
-		${network:+--network "$network"} "$@" "$root/lima.yaml" || return $?
+		${with_tor:+--network "lima:$p2p_network"} \
+		"$@" "$root/lima.yaml" || return $?
 
-	echo ">>> Saving a copy of $name for 'task reset', and restarting it ..."
+	log "Saving a copy of $name for 'task reset', and restarting it ..."
 	limactl stop "$name" || return $?
 	limactl delete --force "$base" >/dev/null 2>&1
 	limactl clone --tty=false "$name" "$base" || return $?
@@ -104,37 +91,37 @@ function run_vm()
 	limactl start --tty=false --timeout 20m "$name" || return $?
 }
 
-if [[ "${1:-}" == "--run" ]]; then
-	shift
-	run "$@"
+# --run, which runs in the background, and --tor may come anywhere; the rest
+# goes to limactl.
+in_background=""
+with_tor=""
+args=()
+for arg in "$@"; do
+	case "$arg" in
+		--run)	in_background=1 ;;
+		--tor)	with_tor=1 ;;
+		*)	args+=("$arg") ;;
+	esac
+done
+
+if [[ -n "$in_background" ]]; then
+	run "${args[@]}"
 	exit $?
 fi
 
 command -v limactl >/dev/null || fail "limactl not found. Run: brew bundle"
 
-# --tor may come anywhere; the rest goes to limactl.
-with_tor=""
-args=()
-for arg in "$@"; do
-	if [[ "$arg" == "--tor" ]]; then
-		with_tor="--tor"
-	else
-		args+=("$arg")
-	fi
-done
-
 if [[ -n "$with_tor" ]]; then
 	has_tor || fail "The ToR needs macOS: Lima links the two VMs with feth."
-	if vm_exists && ! tor_exists; then
-		fail "$name was made without a ToR. Run 'task destroy' and 'task up -- --tor'!"
-	fi
+	vm_exists && ! vm_exists "$tor" &&
+		fail "$name has no ToR. Run 'task destroy' and 'task up -- --tor'!"
 fi
-tor_exists && with_tor="--tor"
+vm_exists "$tor" && with_tor=1
 
 if up_runs; then
 	log "$name is starting already. Follow it with: task status"
 	exit
-elif vm_runs && { [[ -z "$with_tor" ]] || tor_runs; }; then
+elif vm_runs && { [[ -z "$with_tor" ]] || vm_runs "$tor"; }; then
 	log "$name is running. See its services with: task status"
 	exit
 elif vm_runs; then
@@ -153,7 +140,7 @@ if [[ -n "$with_tor" ]]; then
 	check_p2p || exit $?
 fi
 
-nohup "$0" --run ${with_tor:+"$with_tor"} "${args[@]}" > "$up_log" 2>&1 </dev/null &
+nohup "$0" --run ${with_tor:+--tor} "${args[@]}" > "$up_log" 2>&1 </dev/null &
 echo "$!" > "$up_pid" || fail "Writing $up_pid failed!"
 
 log "$doing"

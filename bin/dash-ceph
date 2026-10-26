@@ -5,7 +5,7 @@
 # set_dashboard_password in provision/ceph.sh put it.
 #
 
-source "${0%/*}/functions.sh" || exit $?
+source "${0%/*}/../share/incusdev-vm/incusdev-vm.sh" || exit $?
 
 url="https://127.0.0.1:26871/"
 

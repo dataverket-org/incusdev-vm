@@ -7,15 +7,19 @@
 #   task tor -- shell
 #
 
-source "${0%/*}/functions.sh" || exit $?
+source "${0%/*}/../share/incusdev-vm/incusdev-vm.sh" || exit $?
 
-check_running || exit $?
-tor_exists || fail "$name has no ToR. Make one with: task destroy, task up -- --tor"
-tor_runs || fail "$tor is not running. Run: task up"
+case "${1:-}" in
+	""|shell)	;;
+	*)
+		echo "tor: unrecognized argument $1" >&2
+		exit 1
+		;;
+esac
 
-if [[ "${1:-}" == "shell" ]]; then
-	exec limactl shell "$tor"
-fi
+check_tor_running || exit $?
+
+[[ "${1:-}" == "shell" ]] && exec limactl shell "$tor"
 
 log "$name: the session, and the routes from the ToR"
 guest sudo birdc show protocols tor

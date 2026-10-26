@@ -56,7 +56,7 @@ provision:
 # ports from 26870 that nothing well-known uses and that the ephemeral
 # ranges of Linux and macOS leave alone; inside the VM they keep their own
 # ports, which a Debian host without Lima offers as they are. Nothing else
-# is forwarded. print_services in bin/functions.sh lists the same ports;
+# is forwarded. print_services in share/incusdev-vm/ lists the same ports;
 # keep the two in step.
 portForwards:
 - guestPort: 8443   # Incus API and web UI

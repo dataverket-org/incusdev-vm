@@ -45,11 +45,19 @@ function log()
 }
 
 #
+# Prints an error message.
+#
+function error()
+{
+	echo "!!! $1" >&2
+}
+
+#
 # Prints an error message and exits.
 #
 function fail()
 {
-	echo "!!! $1" >&2
+	error "$1"
 	exit 1
 }
 
@@ -71,19 +79,23 @@ function apt_get()
 }
 
 #
-# Writes stdin to a file if that changes it. Returns 0 when it wrote, 1 when
-# the file was already so, and 2 when writing failed.
+# Writes stdin to a file with the given mode, unless the file holds it
+# already. Sets changed to 1 when it wrote, else to 0.
 #
 function write_file()
 {
-	local file="$1" mode="$2" content
+	local file="$1"
+	local mode="$2"
+	local content
 
 	content="$(cat)"
-	[[ -f "$file" ]] && [[ "$(< "$file")" == "$content" ]] && return 1
+	changed=0
+	[[ -f "$file" && "$(< "$file")" == "$content" ]] && return
 
-	mkdir -p "${file%/*}"                || return 2
-	install -m "$mode" /dev/null "$file" || return 2
-	echo "$content" > "$file"            || return 2
+	mkdir -p "${file%/*}"                || return $?
+	install -m "$mode" /dev/null "$file" || return $?
+	cat > "$file" <<< "$content"         || return $?
+	changed=1
 }
 
 #
@@ -107,28 +119,23 @@ function install_bird()
 #
 function configure_network()
 {
-	local status
-
-	ip link show "$iface" >/dev/null 2>&1 ||
-		{ echo "!!! There is no interface $iface." >&2; return 1; }
-
-	write_file "$networkd" 644 <<EOF
+	write_file "$networkd" 644 <<EOF || return $?
 [Network]
 ManageForeignRoutes=no
 EOF
-	status=$?
-	(( status == 2 )) && return 1
-	(( status == 0 )) && { systemctl restart systemd-networkd || return $?; }
+	if (( changed )); then
+		systemctl restart systemd-networkd || return $?
+	fi
 
-	write_file "$sysctl" 644 <<EOF
+	write_file "$sysctl" 644 <<EOF || return $?
 net.ipv4.ip_forward = 1
 net.ipv6.conf.all.forwarding = 1
 EOF
-	status=$?
-	(( status == 2 )) && return 1
-	(( status == 0 )) && { sysctl -q -p "$sysctl" || return $?; }
+	if (( changed )); then
+		sysctl -q -p "$sysctl" || return $?
+	fi
 
-	write_file "$netplan" 600 <<EOF
+	write_file "$netplan" 600 <<EOF || return $?
 network:
   version: 2
   ethernets:
@@ -146,10 +153,10 @@ network:
       - "$fabric4"
       - "$fabric6"
 EOF
-	status=$?
-	(( status == 2 )) && return 1
-	(( status == 1 )) && ip -br address show dev fabric0 2>/dev/null |
-		grep -qF " ${fabric4} " && return
+	if (( ! changed )) &&
+	   ip -br address show dev fabric0 2>/dev/null | grep -qF " $fabric4 "; then
+		return
+	fi
 
 	log "Adding $address on $iface, and the fabric $fabric4 and $fabric6 ..."
 	netplan apply || return $?
@@ -160,9 +167,7 @@ EOF
 #
 function configure_bird()
 {
-	local status
-
-	write_file "$bird" 640 <<EOF
+	write_file "$bird" 640 <<EOF || return $?
 # The simulated top-of-rack switch, written by provision/tor.sh.
 
 router id ${fabric4%/*};
@@ -209,9 +214,7 @@ protocol bgp servers {
 	};
 }
 EOF
-	status=$?
-	(( status == 2 )) && return 1
-	(( status == 1 )) && systemctl is-active -q bird && return
+	(( ! changed )) && systemctl is-active -q bird && return
 
 	log "Configuring Bird: AS $asn, servers on $iface ..."
 	chown root:bird "$bird" || return $?
@@ -220,8 +223,10 @@ EOF
 }
 
 [[ $EUID -eq 0 ]] || fail "Run this as root!"
+ip link show "$iface" >/dev/null 2>&1 || fail "There is no interface $iface!"
+
 install_bird      || fail "Installing Bird2 failed!"
 configure_network || fail "Configuring the network failed!"
 configure_bird    || fail "Configuring Bird failed!"
 
-log "The ToR is ready: AS $asn on $address%$iface, fabric $fabric4 and $fabric6."
+log "The ToR is ready: AS $asn on $address%$iface, fabric $fabric4, $fabric6."

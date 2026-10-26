@@ -5,7 +5,7 @@
 # The link to the ToR, from "task p2p", stays.
 #
 
-source "${0%/*}/functions.sh" || exit $?
+source "${0%/*}/../share/incusdev-vm/incusdev-vm.sh" || exit $?
 
 # Ends the web UI session of bin/dash-incus, if there is one.
 pkill -f "incus webui $name:"
@@ -16,12 +16,12 @@ if vm_exists; then
 		fail "Deleting $name failed!"
 fi
 
-if base_exists; then
+if vm_exists "$base"; then
 	limactl delete --force "$base" >/dev/null 2>&1 ||
 		fail "Deleting $base failed!"
 fi
 
-if tor_exists; then
+if vm_exists "$tor"; then
 	log "Deleting $tor ..."
 	limactl delete --force "$tor" >/dev/null 2>&1 ||
 		fail "Deleting $tor failed!"

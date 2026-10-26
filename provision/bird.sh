@@ -55,11 +55,19 @@ function log()
 }
 
 #
+# Prints an error message.
+#
+function error()
+{
+	echo "!!! $1" >&2
+}
+
+#
 # Prints an error message and exits.
 #
 function fail()
 {
-	echo "!!! $1" >&2
+	error "$1"
 	exit 1
 }
 
@@ -81,19 +89,23 @@ function apt_get()
 }
 
 #
-# Writes stdin to a file if that changes it. Returns 0 when it wrote, 1 when
-# the file was already so, and 2 when writing failed.
+# Writes stdin to a file with the given mode, unless the file holds it
+# already. Sets changed to 1 when it wrote, else to 0.
 #
 function write_file()
 {
-	local file="$1" mode="$2" content
+	local file="$1"
+	local mode="$2"
+	local content
 
 	content="$(cat)"
-	[[ -f "$file" ]] && [[ "$(< "$file")" == "$content" ]] && return 1
+	changed=0
+	[[ -f "$file" && "$(< "$file")" == "$content" ]] && return
 
-	mkdir -p "${file%/*}"                || return 2
-	install -m "$mode" /dev/null "$file" || return 2
-	echo "$content" > "$file"            || return 2
+	mkdir -p "${file%/*}"                || return $?
+	install -m "$mode" /dev/null "$file" || return $?
+	cat > "$file" <<< "$content"         || return $?
+	changed=1
 }
 
 #
@@ -116,19 +128,17 @@ function install_bird()
 #
 function configure_network()
 {
-	local status
-
-	write_file "$networkd" 644 <<EOF
+	write_file "$networkd" 644 <<EOF || return $?
 [Network]
 ManageForeignRoutes=no
 EOF
-	status=$?
-	(( status == 2 )) && return 1
-	(( status == 0 )) && { systemctl restart systemd-networkd || return $?; }
+	if (( changed )); then
+		systemctl restart systemd-networkd || return $?
+	fi
 
 	[[ "$iface" == lima* ]] || return 0
 
-	write_file "$netplan" 600 <<EOF
+	write_file "$netplan" 600 <<EOF || return $?
 network:
   version: 2
   ethernets:
@@ -139,9 +149,7 @@ network:
       optional: true
       link-local: [ipv6]
 EOF
-	status=$?
-	(( status == 2 )) && return 1
-	(( status == 1 )) && return
+	(( changed )) || return 0
 
 	log "Leaving $iface with its link-local address only ..."
 	netplan apply || return $?
@@ -154,18 +162,20 @@ EOF
 #
 function configure_bird()
 {
-	local status router_id interfaces="" network
+	local router_id network interfaces=""
 
 	router_id="$(ip -4 -o address show dev "${networks%% *}" 2>/dev/null |
 		awk '{ sub("/.*", "", $4); print $4; exit }')"
-	[[ -n "$router_id" ]] ||
-		{ echo "!!! ${networks%% *} has no IPv4 address." >&2; return 1; }
+	if [[ -z "$router_id" ]]; then
+		error "${networks%% *} has no IPv4 address."
+		return 1
+	fi
 
 	for network in $networks; do
 		interfaces+="${interfaces:+, }\"$network\""
 	done
 
-	write_file "$bird" 640 <<EOF
+	write_file "$bird" 640 <<EOF || return $?
 # This Incus host and its top-of-rack switch, written by provision/bird.sh.
 
 router id $router_id;
@@ -220,9 +230,7 @@ protocol bgp tor {
 	};
 }
 EOF
-	status=$?
-	(( status == 2 )) && return 1
-	(( status == 1 )) && systemctl is-active -q bird && return
+	(( ! changed )) && systemctl is-active -q bird && return
 
 	log "Configuring Bird: AS $asn, the switch $peer%$iface in AS $peer_asn ..."
 	chown root:bird "$bird" || return $?

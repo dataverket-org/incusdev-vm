@@ -5,7 +5,7 @@
 # is up. Then it lists the services.
 #
 
-source "${0%/*}/functions.sh" || exit $?
+source "${0%/*}/../share/incusdev-vm/incusdev-vm.sh" || exit $?
 
 seen=0
 notes=0
@@ -86,5 +86,7 @@ fi
 log "$name is running. Waiting for the services ..."
 wait_for_services || error "Not every service answers yet."
 print_services
-tor_runs && { wait_for_bgp || error "The BGP session to $tor is not up yet."; }
+if vm_runs "$tor"; then
+	wait_for_bgp || error "The BGP session to $tor is not up yet."
+fi
 print_tor

@@ -19,18 +19,6 @@ tasks:
     cmds:
       - bin/status
 
-  tor:
-    desc: "The BGP session to the ToR, routes on both ends"
-    silent: true
-    cmds:
-      - bin/tor {{.CLI_ARGS}}
-
-  routed:
-    desc: "Test VM, routed NIC; -- 2, --container, --delete"
-    silent: true
-    cmds:
-      - bin/routed {{.CLI_ARGS}}
-
   check:
     desc: "End-to-end test with a container; -- --vm: a VM"
     silent: true
@@ -55,6 +43,18 @@ tasks:
     cmds:
       - bin/p2p
 
+  tor:
+    desc: "BGP session and routes; -- shell: a shell on the ToR"
+    silent: true
+    cmds:
+      - bin/tor {{.CLI_ARGS}}
+
+  routed:
+    desc: "Test instance, routed NIC; -- 2, --vm, --delete"
+    silent: true
+    cmds:
+      - bin/routed {{.CLI_ARGS}}
+
   reset:
     desc: "The VM as right after the install, in 30 s"
     prompt: Replace the VM with the saved copy? Everything made in it is lost.
@@ -78,5 +78,5 @@ tasks:
   lint:
     desc: "shellcheck on the scripts, validate the Lima files"
     cmds:
-      - shellcheck -s bash -e SC2034,SC2154,SC1090,SC1091,SC2242 bin/* provision/*.sh
+      - shellcheck -s bash -e SC2034,SC2154,SC1090,SC1091,SC2242 bin/* share/incusdev-vm/*.sh provision/*.sh
       - limactl validate lima.yaml tor.yaml

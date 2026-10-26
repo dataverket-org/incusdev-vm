@@ -15,7 +15,7 @@
 # instance named incusdev-routed.
 #
 
-source "${0%/*}/functions.sh" || exit $?
+source "${0%/*}/../share/incusdev-vm/incusdev-vm.sh" || exit $?
 
 # The instance with a routed NIC: 203.0.113.254 and 2001:db8:200::254, out
 # of the way of "task routed".
@@ -91,11 +91,12 @@ check_running || exit $?
 guest sudo bash -c "$(< "$root/provision/check.sh")" bash "$@" ||
 	fail "The test failed inside $name!"
 
-if tor_exists; then
-	tor_runs || fail "$tor is not running. Run: task up"
-	check_tor || fail "$tor and $name have no routes to each other!"
+if vm_exists "$tor"; then
 	vm=""
 	[[ " $* " == *" --vm "* ]] && vm="--vm"
+
+	check_tor_running || exit $?
+	check_tor          || fail "$tor and $name have no routes to each other!"
 	check_routed "$vm" || fail "$tor has no route to a routed NIC!"
 	log "The ToR and $name route to each other, and to routed NICs."
 fi

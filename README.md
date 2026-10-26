@@ -68,7 +68,7 @@ services and whether each one answers:
 | `task s3-credentials` | Print the S3 endpoint and keys; `-- admin` for the RadosGW admin user |
 | `task p2p` | Lay the link to the ToR, with sudo; again after a restart of the Mac |
 | `task tor` | Show the BGP session and the routes on both ends; `-- shell` opens a shell on the ToR |
-| `task routed` | Deploy a test VM with a routed NIC, announced to the ToR; `-- 2`, `--container`, `--delete` |
+| `task routed` | Deploy a test instance with a routed NIC, announced to the ToR: a container, or with `--vm` a virtual machine; `-- 2`, `--delete` |
 | `task reset` | Put the VM back to how it was right after the install |
 | `task down` | Stop the VM, and the ToR, and keep their disks |
 | `task destroy` | Delete the VM, the copy saved for `task reset`, and the ToR |
@@ -203,29 +203,29 @@ A VM made without `--tor` stays without one: run `task destroy` and
 `task up -- --tor`. After that `task up`, `task down` and `task reset` handle
 both VMs; `task destroy` deletes both, and leaves the link.
 
-### A VM with a routed NIC
+### An instance with a routed NIC
 
-`task routed` deploys a test VM whose NIC is routed: Incus gives it the
+`task routed` deploys a test instance whose NIC is routed: Incus gives it the
 addresses `203.0.113.N` and `2001:db8:200::N` and a host route for each, Bird
 in `incusdev` learns those routes from the kernel and announces them, and the
-task waits until the ToR pings both from the fabric. It stays until you remove
-it.
+task waits until the ToR pings both from the fabric. It is a container, as in
+`task check`; `--vm` makes it a virtual machine. It stays until you remove it.
 
 ```sh
-task routed                    # routed1: 203.0.113.1, 2001:db8:200::1
-task routed -- 2 --container   # routed2, a container
+task routed              # routed1: 203.0.113.1, 2001:db8:200::1
+task routed -- 2 --vm    # routed2, a virtual machine
 task routed -- 2 --delete
 ```
 
-Every link that routes is IPv6 only, the VM's too: `task routed` has
-cloud-init give it its two addresses and both default routes by `fe80::1`,
+Every link that routes is IPv6 only, a virtual machine's too: `task routed`
+has cloud-init give it its two addresses and both default routes by `fe80::1`,
 which Incus puts on the host's side of a routed NIC. IPv4 then travels with
 an IPv6 next hop at every hop:
 
 ```
-routed1:       default via inet6 fe80::1 dev eth0
+routed2:       default via inet6 fe80::1 dev eth0
 incusdev:      198.51.100.0/24 via inet6 fe80::1 dev lima0
-incusdev-tor:  203.0.113.1 via inet6 fe80::5055:… dev lima0
+incusdev-tor:  203.0.113.2 via inet6 fe80::5055:… dev lima0
 ```
 
 `task check` checks the link to the ToR so: no IPv4 address on `lima0`, and
@@ -340,6 +340,7 @@ lima.yaml               the VM: image, size, the scripts, port forwards
 tor.yaml                the ToR's VM
 Taskfile.yml            the tasks; each one calls a script in bin/
 bin/                    one script per task, for the Lima VM
+share/incusdev-vm/      the functions that the scripts in bin/ share
 Brewfile                the tools
 renovate.json           lets Renovate propose newer versions
 docs/                   the details
