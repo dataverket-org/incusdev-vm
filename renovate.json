@@ -10,8 +10,8 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Debian cloud image build that the Lima VM boots",
-      "managerFilePatterns": ["/^lima\\.yaml$/"],
+      "description": "Debian cloud image build that the Lima VMs boot",
+      "managerFilePatterns": ["/^lima\\.yaml$/", "/^tor\\.yaml$/"],
       "matchStrings": [
         "cloud/trixie/(?<currentValue>\\d{8}-\\d+)/",
         "-(?:amd64|arm64)-(?<currentValue>\\d{8}-\\d+)\\.qcow2"

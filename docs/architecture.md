@@ -67,6 +67,16 @@ flowchart TB
 | Host loopback | `127.0.0.1` | The three forwarded ports. Nothing listens on other host addresses. |
 | Lima user network | VM at `192.168.5.15` | The VM's `eth0`, with outbound internet through the host. The Ceph daemons bind here. |
 | `incusbr0` | a random `10.x.x.1/24`, chosen when the bridge is created; on macOS always `10.158.42.1/24` | Incus instances. Incus runs DHCP and DNS on the bridge and does NAT out through `eth0`. |
+| The link to the ToR, with `task up -- --tor` | IPv6 link-local only; the ToR's end has `fe80::1` | `lima0` in both VMs, bridged by socket_vmnet on the two ends of the `feth4` ⇄ `feth5` pair. The unnumbered BGP session between Bird2 in the VM and in the ToR, and the traffic it routes. |
+| The fabric, in the ToR | `198.51.100.1/24`, `2001:db8:100::1/64` | `fabric0`, a dummy interface that stands for the rest of the data centre. The ToR announces it. |
+| Routed NICs | `/32`s in `203.0.113.0/24`, `/128`s in `2001:db8:200::/48` | Instances with `nictype=routed`, one host route each. Bird2 in the VM learns those routes and announces them to the ToR. |
+
+With a ToR, the VM routes between the fabric and the instances: a packet
+from the fabric comes in on `lima0` and goes to `incusbr0` or to a routed
+NIC's own interface, and the reply goes back by the route that BGP gave for
+the fabric. Bird2 in the VM never takes a default route, so traffic to the
+internet still leaves through `eth0`. The ToR has its own `eth0` on its own
+Lima user network, for its packages only.
 
 The Ceph container has no network of its own. It runs with `--network host`,
 so its daemons listen on the VM's own addresses. That is what lets the VM's

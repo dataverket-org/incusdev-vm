@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+#
+# Lays the point-to-point link between incusdev and its ToR, on macOS: a
+# pair of feth interfaces joined end to end, a Lima network bridged on each
+# end, and the sudoers file that lets Lima start them. It asks for sudo.
+#
+# The networks and the sudoers file stay. The feth pair does not survive a
+# restart of the Mac, and "task up" asks for this again after one.
+#
+
+source "${0%/*}/functions.sh" || exit $?
+
+has_tor || fail "The ToR and its link need macOS."
+command -v limactl >/dev/null || fail "limactl not found. Run: brew bundle"
+
+#
+# Creates the feth pair and joins its ends.
+#
+function lay_feth()
+{
+	feth_ready && return
+
+	log "Creating $p2p_feth and $p2p_feth_tor, joined end to end ..."
+	local feth
+	for feth in "$p2p_feth" "$p2p_feth_tor"; do
+		ifconfig "$feth" >/dev/null 2>&1 && continue
+		sudo ifconfig "$feth" create || return $?
+	done
+	sudo ifconfig "$p2p_feth" peer "$p2p_feth_tor" || return $?
+	sudo ifconfig "$p2p_feth" up                   || return $?
+	sudo ifconfig "$p2p_feth_tor" up               || return $?
+}
+
+#
+# Adds a bridged network on a feth end to Lima's networks.yaml, under
+# "networks:", unless it is there.
+#
+function add_network()
+{
+	local network="$1" feth="$2" tmp
+
+	grep -q "^  $network:" "$lima_networks" && return
+
+	log "Adding the Lima network $network, bridged on $feth ..."
+	tmp="$(mktemp)" || return $?
+	awk -v add="  $network:\n    mode: bridged\n    interface: $feth" '
+		{ print }
+		/^networks:/ { print add }
+	' "$lima_networks" > "$tmp" || return $?
+	cat "$tmp" > "$lima_networks" && rm -f "$tmp"
+}
+
+#
+# Writes the sudoers file again when the networks changed.
+#
+function update_sudoers()
+{
+	limactl sudoers --check >/dev/null 2>&1 && return
+
+	local sudoers
+
+	sudoers="$(limactl sudoers)" || return $?
+	log "Updating /etc/sudoers.d/lima for the new networks ..."
+	echo "$sudoers" | sudo tee /etc/sudoers.d/lima >/dev/null || return $?
+}
+
+# networks.yaml is made the first time Lima runs.
+[[ -f "$lima_networks" ]] || limactl list >/dev/null 2>&1
+[[ -f "$lima_networks" ]] || fail "$lima_networks is missing!"
+
+lay_feth                                      || fail "Creating the feth pair failed!"
+add_network "$p2p_network" "$p2p_feth"         || fail "Adding $p2p_network failed!"
+add_network "$p2p_network_tor" "$p2p_feth_tor" || fail "Adding $p2p_network_tor failed!"
+update_sudoers                                || fail "Updating the sudoers file failed!"
+
+log "The link is laid: $name on $p2p_feth, $tor on $p2p_feth_tor."

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
-# Deletes the VM and everything in it, the copy saved for "task reset", and
-# the incus remote that bin/dash-incus added for it.
+# Deletes the VM and everything in it, the copy saved for "task reset", the
+# ToR if there is one, and the incus remote that bin/dash-incus added for it.
+# The link to the ToR, from "task p2p", stays.
 #
 
 source "${0%/*}/functions.sh" || exit $?
@@ -18,6 +19,12 @@ fi
 if base_exists; then
 	limactl delete --force "$base" >/dev/null 2>&1 ||
 		fail "Deleting $base failed!"
+fi
+
+if tor_exists; then
+	log "Deleting $tor ..."
+	limactl delete --force "$tor" >/dev/null 2>&1 ||
+		fail "Deleting $tor failed!"
 fi
 
 if command -v incus >/dev/null; then

@@ -8,7 +8,7 @@ tasks:
       - task --list
 
   up:
-    desc: "Create the VM, or start it; task status follows"
+    desc: "Create the VM, or start it; -- --tor: with a ToR"
     silent: true
     cmds:
       - bin/up {{.CLI_ARGS}}
@@ -18,6 +18,18 @@ tasks:
     silent: true
     cmds:
       - bin/status
+
+  tor:
+    desc: "The BGP session to the ToR, routes on both ends"
+    silent: true
+    cmds:
+      - bin/tor {{.CLI_ARGS}}
+
+  routed:
+    desc: "Test VM, routed NIC; -- 2, --container, --delete"
+    silent: true
+    cmds:
+      - bin/routed {{.CLI_ARGS}}
 
   check:
     desc: "End-to-end test with a container; -- --vm: a VM"
@@ -36,6 +48,12 @@ tasks:
     silent: true
     cmds:
       - bin/s3-credentials {{.CLI_ARGS}}
+
+  p2p:
+    desc: "Lay the link to the ToR; again after a Mac restart"
+    silent: true
+    cmds:
+      - bin/p2p
 
   reset:
     desc: "The VM as right after the install, in 30 s"
@@ -58,7 +76,7 @@ tasks:
       - bin/destroy
 
   lint:
-    desc: "shellcheck on the scripts, validate lima.yaml"
+    desc: "shellcheck on the scripts, validate the Lima files"
     cmds:
       - shellcheck -s bash -e SC2034,SC2154,SC1090,SC1091,SC2242 bin/* provision/*.sh
-      - limactl validate lima.yaml
+      - limactl validate lima.yaml tor.yaml

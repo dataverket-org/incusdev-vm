@@ -25,9 +25,10 @@ containerd:
   system: false
   user: false
 
-# The two scripts that also install the testbed on a Debian host. Lima copies
+# The scripts that also install the testbed on a Debian host. Lima copies
 # them into the VM when it is created, so a change to them needs a new VM,
-# and runs them as root on every start.
+# and runs them as root on every start. bird.sh does nothing unless the VM
+# was made with "task up -- --tor", which gives it the link to the ToR.
 #
 # The boot step makes incus-admin a default group for new users, before Lima
 # creates the VM's user: a group that incus.sh adds would only count after a
@@ -46,6 +47,8 @@ provision:
     getsubids -g root >/dev/null 2>&1 || echo "root:1000000:1000000000" >> /etc/subgid
 - mode: system
   file: provision/incus.sh
+- mode: system
+  file: provision/bird.sh
 - mode: system
   file: provision/ceph.sh
 
