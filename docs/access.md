@@ -125,3 +125,11 @@ They are forwarded to the VM's 8443, 8444 and 8000, and were chosen because
 nothing well-known uses them. If another program holds one, Lima cannot
 forward it, and `task status` lists the service as `down` or shows the other
 program. Stop that program and run `task down` and `task up`.
+
+Another Lima VM that forwards the same ports takes them too, if it started
+first; a second copy of this testbed is one. `incusdev` then logs
+`bind: address already in use` in `~/.lima/incusdev/ha.stderr.log`, and
+the ports lead to the other VM: `task dashboard` fails with
+`No matching certificate add operation found`, since the token is made in
+`incusdev` and given to the other Incus. `lsof -nP -iTCP:26870 -sTCP:LISTEN`
+names the process that holds a port. Stop that VM with `limactl stop`.

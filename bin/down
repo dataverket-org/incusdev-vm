@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# Stops the VM. Its disk, and so Incus and Ceph, are kept.
+# Stops the VM, and the ToR if there is one. Their disks, and so Incus and
+# Ceph, are kept.
 #
 
 source "${0%/*}/functions.sh" || exit $?
@@ -12,7 +13,12 @@ if up_runs; then
 	fail "$name is still starting. Follow it with: task status"
 fi
 
-vm_runs || exit 0
+if vm_runs; then
+	log "Stopping $name ..."
+	limactl stop "$name" >/dev/null 2>&1 || fail "Stopping $name failed!"
+fi
 
-log "Stopping $name ..."
-limactl stop "$name" >/dev/null 2>&1 || fail "Stopping $name failed!"
+if tor_runs; then
+	log "Stopping $tor ..."
+	limactl stop "$tor" >/dev/null 2>&1 || fail "Stopping $tor failed!"
+fi

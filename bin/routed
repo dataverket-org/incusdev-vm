@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+#
+# Deploys a test instance with a routed NIC, a virtual machine unless
+# --container is given, and waits until the ToR reaches it: Bird on incusdev
+# announces both its addresses. The number picks the name and the addresses,
+# 1 when it is left out. It stays until --delete:
+#
+#   task routed                       routed1: 203.0.113.1, 2001:db8:200::1
+#   task routed -- 2                  routed2: 203.0.113.2, 2001:db8:200::2
+#   task routed -- 3 --container      a container, routed3
+#   task routed -- 2 --delete         removes routed2
+#
+
+source "${0%/*}/functions.sh" || exit $?
+
+n=1
+vm="--vm"
+delete=""
+for arg in "$@"; do
+	case "$arg" in
+		--container)	vm="" ;;
+		--delete)	delete=1 ;;
+		*[!0-9]*|"")	fail "Unknown argument: $arg" ;;
+		*)		n="$arg" ;;
+	esac
+done
+(( n >= 1 && n <= 253 )) || fail "The number must be from 1 to 253."
+instance="routed$n"
+
+check_running || exit $?
+tor_exists || fail "$name has no ToR. Make one with: task destroy, task up -- --tor"
+tor_runs || fail "$tor is not running. Run: task up"
+
+if [[ -n "$delete" ]]; then
+	log "Deleting $instance ..."
+	guest incus delete --force "$instance" || fail "Deleting $instance failed!"
+	exit
+fi
+
+guest incus info "$instance" >/dev/null 2>&1 &&
+	fail "$instance exists already. Remove it with: task routed -- $n --delete"
+
+launch_routed "$instance" "$n" "$vm" || fail "Launching $instance failed!"
+wait_for_routed "$n" "$vm" ||
+	fail "$tor does not reach $instance. See: task tor"
+
+log "$instance answers the ToR on 203.0.113.$n and 2001:db8:200::$n."
+log "In it: limactl shell incusdev incus exec $instance -- sh"

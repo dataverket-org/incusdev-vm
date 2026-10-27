@@ -86,3 +86,5 @@ fi
 log "$name is running. Waiting for the services ..."
 wait_for_services || error "Not every service answers yet."
 print_services
+tor_runs && { wait_for_bgp || error "The BGP session to $tor is not up yet."; }
+print_tor

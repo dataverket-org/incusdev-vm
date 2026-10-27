@@ -7,8 +7,82 @@
 #
 #   task check -- --vm
 #
+# With a ToR, it also checks that the two have routes to each other: the
+# ToR pings incusbr0's addresses from the fabric's, over IPv4 and IPv6. Then
+# it launches an instance with a routed NIC, a container or with --vm a
+# virtual machine, and the ToR pings its two addresses, which only Bird on
+# incusdev announces. It removes the instance, and force-deletes any
+# instance named incusdev-routed.
+#
 
 source "${0%/*}/functions.sh" || exit $?
+
+# The instance with a routed NIC: 203.0.113.254 and 2001:db8:200::254, out
+# of the way of "task routed".
+routed="incusdev-routed"
+routed_n=254
+
+#
+# Checks that the link carries IPv6 only: lima0 has no IPv4 address at
+# either end, and every IPv4 route that Bird put in either kernel goes by an
+# IPv6 link-local next hop.
+#
+function check_ipv6_link()
+{
+	local end routes
+
+	log "Checking that the link to $tor carries IPv4 routes over IPv6 only ..."
+	for end in guest tor_guest; do
+		if [[ -n "$($end ip -4 -o address show dev lima0)" ]]; then
+			error "lima0 has an IPv4 address."
+			return 1
+		fi
+
+		routes="$($end ip -4 route show proto bird)"
+		printf "  %s\n" "${routes//$'\n'/$'\n'  }"
+		[[ -n "$routes" ]] || return 1
+		if echo "$routes" | grep -qv " via inet6 fe80::"; then
+			error "An IPv4 route has no IPv6 link-local next hop."
+			return 1
+		fi
+	done
+}
+
+#
+# Checks the BGP session and the routes it gives both ends.
+#
+function check_tor()
+{
+	local ipv4 ipv6
+
+	log "Waiting for the BGP session to $tor ..."
+	wait_for_bgp || return $?
+	check_ipv6_link || return $?
+
+	ipv4="$(guest ip -4 -o address show dev incusbr0 |
+		awk '{ sub("/.*", "", $4); print $4; exit }')"
+	ipv6="$(guest ip -6 -o address show dev incusbr0 scope global |
+		awk '{ sub("/.*", "", $4); print $4; exit }')"
+
+	ping_from_tor 198.51.100.1 "$ipv4" || return $?
+	[[ -z "$ipv6" ]] || ping_from_tor 2001:db8:100::1 "$ipv6" || return $?
+}
+
+#
+# Launches an instance with a routed NIC, and has the ToR ping both its
+# addresses. The instance is removed whether the step passes or not.
+#
+function check_routed()
+{
+	local vm="${1:-}" status=0
+
+	guest incus delete --force "$routed" >/dev/null 2>&1
+	launch_routed "$routed" "$routed_n" "$vm" || return $?
+	wait_for_routed "$routed_n" "$vm" || status=$?
+
+	guest incus delete --force "$routed" >/dev/null || return $?
+	return "$status"
+}
 
 check_running || exit $?
 
@@ -16,6 +90,15 @@ check_running || exit $?
 # our arguments after it.
 guest sudo bash -c "$(< "$root/provision/check.sh")" bash "$@" ||
 	fail "The test failed inside $name!"
+
+if tor_exists; then
+	tor_runs || fail "$tor is not running. Run: task up"
+	check_tor || fail "$tor and $name have no routes to each other!"
+	vm=""
+	[[ " $* " == *" --vm "* ]] && vm="--vm"
+	check_routed "$vm" || fail "$tor has no route to a routed NIC!"
+	log "The ToR and $name route to each other, and to routed NICs."
+fi
 
 print_services | tee /dev/stderr | grep -q " down " &&
 	fail "A service does not answer on this computer!"

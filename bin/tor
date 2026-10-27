@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+#
+# Shows the BGP session between incusdev and its ToR, and the routes each
+# end has from the other. Without arguments it shows both ends; with
+# "shell" it opens a shell on the ToR instead:
+#
+#   task tor -- shell
+#
+
+source "${0%/*}/functions.sh" || exit $?
+
+check_running || exit $?
+tor_exists || fail "$name has no ToR. Make one with: task destroy, task up -- --tor"
+tor_runs || fail "$tor is not running. Run: task up"
+
+if [[ "${1:-}" == "shell" ]]; then
+	exec limactl shell "$tor"
+fi
+
+log "$name: the session, and the routes from the ToR"
+guest sudo birdc show protocols tor
+guest sudo birdc show route protocol tor
+guest ip route show proto bird
+guest ip -6 route show proto bird
+
+echo
+log "$tor: the sessions, and the routes from its servers"
+tor_guest sudo birdc show protocols
+tor_guest sudo birdc show route where source = RTS_BGP
+tor_guest ip route show proto bird
+tor_guest ip -6 route show proto bird
