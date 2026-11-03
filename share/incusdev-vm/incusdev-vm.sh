@@ -56,6 +56,21 @@ incus_src="${INCUS_SRC:-}"
 up_log="${TMPDIR:-/tmp}/$name-up.log"
 up_pid="${TMPDIR:-/tmp}/$name-up.pid"
 
+# The browser's client certificate for the Incus web UI, one for both hosts.
+# It is the web UI's own login: no cookie, so both hosts' pages stay logged
+# in side by side.
+cert_dir="${XDG_CONFIG_HOME:-$HOME/.config}/incusdev-vm"
+browser_cert_name="incusdev-browser"
+browser_cert="$cert_dir/$browser_cert_name.crt"
+browser_key="$cert_dir/$browser_cert_name.key"
+browser_p12="$cert_dir/$browser_cert_name.p12"
+browser_p12_password="incusdev"
+
+case "$(uname -s)" in
+	Darwin)	opener="open" ;;
+	*)	opener="xdg-open" ;;
+esac
+
 source "$share/logging.sh"  || return $?
 source "$share/vm.sh"       || return $?
 source "$share/services.sh" || return $?

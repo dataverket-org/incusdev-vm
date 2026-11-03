@@ -12,9 +12,6 @@ up_runs && fail "$name is still starting. Follow it with: task status"
 vm_exists "$base" ||
 	fail "There is no saved copy! 'task destroy' and 'task up' make one."
 
-# Ends the web UI session of bin/dash-incus, if there is one.
-pkill -f "incus webui $name:"
-
 log "Replacing $name with the saved copy ..."
 if vm_exists; then
 	limactl delete --force "$name" >/dev/null 2>&1 ||

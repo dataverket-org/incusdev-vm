@@ -64,7 +64,7 @@ services and whether each one answers:
 | `task up` | Create the VM, or start it, in the background; `-- --tor` creates it with a ToR, see [A top-of-rack switch](#a-top-of-rack-switch-with-bgp); `-- --help` lists the options. Every task works on a second host with `INCUSDEV_HOST=2` in front, see [A second host](#a-second-host) |
 | `task status` | Show the VM and its services; while it starts, follow the steps |
 | `task check` | Run the end-to-end test, with a container; `-- --vm` launches a virtual machine instead, which needs nested virtualization |
-| `task dashboard` | Open the Incus web UI, logged in, and the Ceph dashboard, and print its password. One of them: `-- incus` or `-- ceph` |
+| `task dashboard` | Open the Incus web UI, logged in with a browser certificate that it makes the first time, and the Ceph dashboard, and print its password. One of them: `-- incus` or `-- ceph` |
 | `task s3-credentials` | Print the S3 endpoint and keys; `-- admin` for the RadosGW admin user |
 | `task p2p` | Lay the link to the ToR, with sudo; again after a restart of the Mac |
 | `task tor` | Show the BGP session and the routes on both ends; `-- shell` opens a shell on the ToR |

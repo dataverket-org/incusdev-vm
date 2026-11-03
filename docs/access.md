@@ -13,32 +13,37 @@ service; accept the certificate.
 task dashboard -- incus
 ```
 
-This opens the web UI in your browser, already logged in. It works through
-the `incus` client that the Brewfile installs:
+This opens the web UI that the VM serves itself, at
+`https://127.0.0.1:26870/ui/` (`26873` for `incusdev2`), logged in with a
+client certificate in your browser:
 
 1. The script adds a remote named `incusdev` to your incus client, with a
-   one-time token from the VM. The client makes its own certificate.
-2. It runs `incus webui incusdev:`. The client serves the web UI on a local
-   address and logs in with its certificate, so the browser needs none.
-3. The client stays in the background, because the page works through it.
-   The session lasts until `task down` or `task destroy`.
+   one-time token from the VM, for the command line.
+2. The first time, it makes a client certificate for your browser in
+   `~/.config/incusdev-vm/`, one for both hosts, and on macOS adds it to
+   your login keychain, which Vivaldi, Chrome and Safari use.
+3. It trusts that certificate in the VM's Incus, once per VM.
+4. The browser warns about the VM's self-signed certificate, and then asks
+   which certificate to log in with: pick `incusdev-browser`. macOS may ask
+   whether the browser may use the key: allow it always.
 
-Only one web UI at a time stays logged in per browser profile. `incus
-webui` keeps the login in a cookie on `127.0.0.1`, which browsers share
-across ports, and it answers nothing to a page opened at any other hostname.
-So `INCUSDEV_HOST=2 task dashboard` logs `incusdev`'s page out, and the other
-way round. To keep both, open the second one in a private window or another
-browser profile: this prints its address, without opening it.
-
-```sh
-BROWSER=none incus webui incusdev2:
-```
+The login is the TLS certificate, not a cookie, so the two hosts' web UIs
+stay logged in side by side. Firefox has its own certificate store: import
+`~/.config/incusdev-vm/incusdev-browser.p12` there, password `incusdev`. On
+Linux the script says the same.
 
 The remote `incusdev` belongs to this project. The script replaces it when it
 stops working, which happens when the VM is deleted and made again, and
 `task destroy` removes it.
 
-On a Debian host, do the same by hand from the computer you browse on:
+On a Debian host, trust your browser's certificate there, and open
+`https://<host>:8443/ui/`:
+
+```sh
+sudo incus config trust add-certificate incusdev-browser.crt
+```
+
+Or go through the incus client, from the computer you browse on:
 
 ```sh
 sudo incus config trust add laptop                     # on the host: a token

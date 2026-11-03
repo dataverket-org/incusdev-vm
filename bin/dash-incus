@@ -1,17 +1,38 @@
 #!/usr/bin/env bash
 #
-# Opens the Incus web UI in the browser, logged in.
+# Opens the Incus web UI in the browser, served by the VM itself, logged in
+# with a client certificate: one for both hosts, in your login keychain on
+# macOS. The browser asks which certificate to use, once per host.
 #
 # This script owns the remote named incusdev in your incus client
 # configuration: it adds it, and replaces it when it no longer works, as after
-# "task destroy". "incus webui" then opens the browser and stays in the
-# background, since the page works through it. "task down" ends it.
+# "task destroy".
 #
 
 source "${0%/*}/../share/incusdev-vm/incusdev-vm.sh" || exit $?
 
+url="https://127.0.0.1:$incus_port/ui/"
+
 #
-# Prints a one-time token for a client of the given name, after removing the
+# Removes the certificates that a client of the given name has in the VM's
+# Incus.
+#
+function untrust_name()
+{
+	local client="$1"
+	# shellcheck disable=SC2016
+	local pick='$1 == name { print $2 }'
+	local fingerprints fingerprint
+
+	fingerprints="$(guest incus config trust list -f csv -c nF |
+		awk -F, -v name="$client" "$pick")" || return $?
+	for fingerprint in $fingerprints; do
+		guest sudo incus config trust remove "$fingerprint" || return $?
+	done
+}
+
+#
+# Prints a one-time token for a client of the given name, in place of the
 # certificates and unused tokens that the name already has in Incus. So a
 # remote that is set up again replaces its old entry.
 #
@@ -19,17 +40,9 @@ function trust_token()
 {
 	local client="$1"
 
-	# shellcheck disable=SC2016
-	guest sudo bash -c '
-		incus config trust list -f json |
-		jq -r --arg name "$1" \
-			".[] | select(.name == \$name) | .fingerprint" |
-		while read -r fingerprint; do
-			incus config trust remove "$fingerprint" || exit 1
-		done
-		incus config trust revoke-token "$1" >/dev/null 2>&1
-		incus config trust add --quiet "$1"
-	' bash "$client" || return $?
+	untrust_name "$client" || return $?
+	guest sudo incus config trust revoke-token "$client" >/dev/null 2>&1
+	guest sudo incus config trust add --quiet "$client" || return $?
 }
 
 #
@@ -60,23 +73,105 @@ function ensure_remote()
 }
 
 #
-# Starts "incus webui" in the background, in place of an earlier one. It
-# opens the browser by itself.
+# Makes the browser's client certificate, once: a key, a certificate for ten
+# years, and both in a PKCS #12 file to import. Browsers offer only a
+# certificate for client authentication, and no CA, as Incus makes its own.
 #
-function open_webui()
+function make_browser_cert()
 {
-	pkill -f "incus webui $name:"
-	nohup incus webui "$name:" >/dev/null 2>&1 </dev/null &
+	[[ -f "$browser_p12" ]] && return
 
-	sleep 1
-	kill -0 "$!" 2>/dev/null || return 1
+	log "Making a client certificate for your browser in $cert_dir ..."
+	mkdir -p "$cert_dir" || return $?
+	( umask 077 &&
+	  openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
+		-subj "/CN=$browser_cert_name" \
+		-addext "basicConstraints=critical,CA:FALSE" \
+		-addext "keyUsage=critical,digitalSignature,keyEncipherment" \
+		-addext "extendedKeyUsage=clientAuth" \
+		-keyout "$browser_key" -out "$browser_cert" 2>/dev/null &&
+	  openssl pkcs12 -export -name "$browser_cert_name" \
+		-in "$browser_cert" -inkey "$browser_key" \
+		-passout "pass:$browser_p12_password" -out "$browser_p12" ) ||
+		return $?
+}
+
+#
+# Prints the SHA-256 fingerprint of the browser's certificate, in lowercase
+# hex without colons, as Incus and the keychain show it.
+#
+function browser_fingerprint()
+{
+	openssl x509 -in "$browser_cert" -noout -fingerprint -sha256 |
+		sed 's/.*=//; s/://g' | tr 'A-F' 'a-f'
+}
+
+#
+# Trusts the browser's certificate in the VM's Incus, unless it does, in
+# place of an earlier one of the same name.
+#
+function trust_browser_cert()
+{
+	local fingerprint
+
+	fingerprint="$(browser_fingerprint)" || return $?
+	guest incus config trust show "$fingerprint" >/dev/null 2>&1 && return
+
+	log "Trusting the certificate in $name ..."
+	untrust_name "$browser_cert_name" || return $?
+
+	# shellcheck disable=SC2016
+	guest sudo bash -c '
+		file="$(mktemp)" || exit 1
+		printf "%s\n" "$1" > "$file" &&
+		incus config trust add-certificate "$file" --name "$2"
+		status=$?
+		rm -f "$file"
+		exit "$status"
+	' bash "$(< "$browser_cert")" "$browser_cert_name" || return $?
+}
+
+#
+# Imports the browser's certificate and key into the login keychain on
+# macOS, unless it holds them, in place of earlier ones of the same name.
+# Elsewhere it says where the file is.
+#
+function import_browser_cert()
+{
+	local fingerprint
+
+	if [[ "$(uname -s)" != "Darwin" ]]; then
+		log "Import $browser_p12 into your browser, if not done yet."
+		log "Its password is $browser_p12_password."
+		return
+	fi
+
+	fingerprint="$(browser_fingerprint)" || return $?
+	security find-certificate -a -Z -c "$browser_cert_name" 2>/dev/null |
+		grep -qi "SHA-256 hash: $fingerprint" && return
+
+	security find-certificate -a -Z -c "$browser_cert_name" 2>/dev/null |
+		sed -n 's/^SHA-1 hash: //p' |
+		while read -r sha1; do
+			security delete-identity -Z "$sha1" >/dev/null || exit 1
+		done || return $?
+
+	log "Adding the certificate to your login keychain ..."
+	security import "$browser_p12" -f pkcs12 -P "$browser_p12_password" \
+		>/dev/null || return $?
 }
 
 check_running || exit $?
-command -v incus >/dev/null || fail "incus not found. Run: brew bundle"
+command -v incus >/dev/null   || fail "incus not found. Run: brew bundle"
+command -v openssl >/dev/null || fail "openssl not found!"
 
-ensure_remote || fail "Setting up the incus remote $name failed!"
-open_webui    || fail "The Incus web UI did not start. Try: incus webui $name:"
+ensure_remote       || fail "Setting up the incus remote $name failed!"
+make_browser_cert   || fail "Making the browser's certificate failed!"
+trust_browser_cert  || fail "Trusting the certificate in $name failed!"
+import_browser_cert || fail "Importing the certificate failed!"
 
-log "The Incus web UI is open in your browser, logged in."
-log "It works until you run 'task down'."
+command -v "$opener" >/dev/null || fail "No $opener here. Open $url yourself."
+log "Opening $url ..."
+"$opener" "$url" || fail "Opening $url failed!"
+
+log "Accept the VM's own certificate, and pick $browser_cert_name to log in."
