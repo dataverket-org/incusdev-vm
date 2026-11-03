@@ -25,9 +25,21 @@ containerd:
   system: false
   user: false
 
-# The two scripts that also install the testbed on a Debian host. Lima copies
+# What tells one Incus host from the other, as the provision scripts take it.
+# These are incusdev's; "task up" sets incusdev2's, see
+# share/incusdev-vm/incusdev-vm.sh.
+param:
+  INCUS_SUBNET: "10.158.42.1/24"
+  INCUSDEV_CEPH: "yes"
+  BGP_ASN: "65001"
+  BGP_ROUTED4: "203.0.113.0/24"
+  BGP_ROUTED6: "2001:db8:200::/48"
+
+# The scripts that also install the testbed on a Debian host. Lima copies
 # them into the VM when it is created, so a change to them needs a new VM,
-# and runs them as root on every start.
+# and runs them as root on every start. bird.sh does nothing unless the VM
+# was made with "task up -- --tor", which gives it the link to the ToR, and
+# ceph.sh nothing in incusdev2.
 #
 # The boot step makes incus-admin a default group for new users, before Lima
 # creates the VM's user: a group that incus.sh adds would only count after a
@@ -44,8 +56,20 @@ provision:
     echo "GROUPS=incus-admin" >> /etc/default/useradd
     getsubids root >/dev/null 2>&1 || echo "root:1000000:1000000000" >> /etc/subuid
     getsubids -g root >/dev/null 2>&1 || echo "root:1000000:1000000000" >> /etc/subgid
+# The settings above, where the scripts read them. Lima writes the file
+# before it runs them.
+- mode: data
+  path: /etc/default/incusdev-vm
+  content: |
+    INCUS_SUBNET="{{.Param.INCUS_SUBNET}}"
+    INCUSDEV_CEPH="{{.Param.INCUSDEV_CEPH}}"
+    BGP_ASN="{{.Param.BGP_ASN}}"
+    BGP_ROUTED4="{{.Param.BGP_ROUTED4}}"
+    BGP_ROUTED6="{{.Param.BGP_ROUTED6}}"
 - mode: system
   file: provision/incus.sh
+- mode: system
+  file: provision/bird.sh
 - mode: system
   file: provision/ceph.sh
 
@@ -53,8 +77,9 @@ provision:
 # ports from 26870 that nothing well-known uses and that the ephemeral
 # ranges of Linux and macOS leave alone; inside the VM they keep their own
 # ports, which a Debian host without Lima offers as they are. Nothing else
-# is forwarded. print_services in bin/functions.sh lists the same ports;
-# keep the two in step.
+# is forwarded. incusdev2 has the three ports after these, see
+# share/incusdev-vm/incusdev-vm.sh, which lists them for both; keep the two
+# in step.
 portForwards:
 - guestPort: 8443   # Incus API and web UI
   hostPort: 26870

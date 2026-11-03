@@ -10,6 +10,9 @@ them in a VM on your computer.
 - Incus 7.0 LTS with its web UI, running virtual machines and containers.
 - A one-node Ceph cluster with block storage (RBD), an S3 API and a dashboard.
 - Two Incus storage pools: `default` on local disk and `ceph` on RBD.
+- On macOS, if you ask for it: a simulated top-of-rack switch, a second VM
+  with Bird2, and Bird2 in the VM, peering over an unnumbered IPv6
+  link-local BGP session. Instances with a routed NIC are announced to it.
 - These services:
 
 | Service | Port on a Debian host | On your computer, with Lima | Login |
@@ -58,15 +61,18 @@ services and whether each one answers:
 
 | Task | What it does |
 |---|---|
-| `task up` | Create the VM, or start it, in the background |
+| `task up` | Create the VM, or start it, in the background; `-- --tor` creates it with a ToR, see [A top-of-rack switch](#a-top-of-rack-switch-with-bgp); `-- --help` lists the options. Every task works on a second host with `INCUSDEV_HOST=2` in front, see [A second host](#a-second-host) |
 | `task status` | Show the VM and its services; while it starts, follow the steps |
 | `task check` | Run the end-to-end test, with a container; `-- --vm` launches a virtual machine instead, which needs nested virtualization |
-| `task dashboard` | Open the Incus web UI, logged in, and the Ceph dashboard, and print its password. One of them: `-- incus` or `-- ceph` |
+| `task dashboard` | Open the Incus web UI, logged in with a browser certificate that it makes the first time, and the Ceph dashboard, and print its password. One of them: `-- incus` or `-- ceph` |
 | `task s3-credentials` | Print the S3 endpoint and keys; `-- admin` for the RadosGW admin user |
+| `task p2p` | Lay the link to the ToR, with sudo; again after a restart of the Mac |
+| `task tor` | Show the BGP session and the routes on both ends; `-- shell` opens a shell on the ToR |
+| `task routed` | Deploy a test instance with a routed NIC, announced to the ToR: a container, or with `--vm` a virtual machine; `-- 2`, `--delete` |
 | `task reset` | Put the VM back to how it was right after the install |
-| `task down` | Stop the VM and keep its disk |
-| `task destroy` | Delete the VM and the copy saved for `task reset` |
-| `task lint` | Run shellcheck and validate `lima.yaml` |
+| `task down` | Stop the VM, and the ToR, and keep their disks |
+| `task destroy` | Delete the VM, the copy saved for `task reset`, and the ToR |
+| `task lint` | Run shellcheck and validate `lima.yaml` and `tor.yaml` |
 
 After `task down`, `task up` and `task status` have the VM back in about
 30 seconds.
@@ -144,6 +150,153 @@ task up
 
 [from-source]: https://linuxcontainers.org/incus/docs/main/installing/#install-incus-from-source
 
+## A top-of-rack switch, with BGP
+
+On macOS the VM can have a simulated top-of-rack switch (ToR): a second,
+small VM, `incusdev-tor`, running Bird2. It is joined to `incusdev` by a
+point-to-point link of its own, a pair of `feth` interfaces, and Bird2 in
+`incusdev` holds a BGP session with it across that link. Instances with a
+routed NIC are announced to the switch, over IPv4 and IPv6.
+
+```
+incusdev, AS 65001                          incusdev-tor, AS 65000
+  Bird2: incusbr0, routed NICs                Bird2: the fabric
+  lima0: link-local only   ── feth4 ⇄ feth5 ──  lima0: fe80::1
+  BGP to fe80::1%lima0                         fabric0: 198.51.100.1/24
+                                                        2001:db8:100::1/64
+```
+
+The session is unnumbered: the link has no addresses but IPv6 link-local
+ones. The switch's port has the fixed `fe80::1` and accepts any server that
+connects from a link-local address in an AS other than its own; `incusdev`
+connects to it. IPv4 routes travel with IPv6 next hops (RFC 8950), and land
+in the kernel as `via inet6 fe80::…`.
+
+| Announced by | What | Prefixes |
+|---|---|---|
+| `incusdev` | the Incus networks | `incusbr0`'s subnets |
+| `incusdev` | routed NICs, learned from the host routes Incus adds | `/32`s in `203.0.113.0/24`, `/128`s in `2001:db8:200::/48` |
+| the ToR | the fabric, a dummy interface for the rest of the data centre | `198.51.100.0/24`, `2001:db8:100::/64` |
+
+`incusdev` never takes a default route from the switch; its internet stays on
+`eth0`, and Incus's networks are masqueraded only there. Towards the switch
+they keep their own addresses. The addresses are documentation ranges, so
+nothing collides with a real network.
+
+### Create it
+
+The ToR is chosen when the VM is created. The link needs root once, for the
+`feth` pair, two Lima networks bridged on its ends, and the sudoers file that
+lets Lima start them. `task p2p` does that and asks for sudo; run it in your
+own terminal. The `feth` pair is gone after a restart of the Mac, and
+`task up` asks for `task p2p` again then.
+
+```sh
+task p2p            # the link: feth4 ⇄ feth5, the networks incusdev-p2p
+                    # and incusdev-p2p-tor in ~/.lima/_config/networks.yaml
+task up -- --tor    # the ToR first, then incusdev, about 8 minutes
+task status         # the services, and the BGP session
+task tor            # the session, and the routes on both ends
+task check          # also pings incusdev and a routed NIC from the fabric
+```
+
+A VM made without `--tor` stays without one: run `task destroy` and
+`task up -- --tor`. After that `task up`, `task down` and `task reset` handle
+both VMs; `task destroy` deletes both, and leaves the link. While a second
+host has the ToR, `task down` and `task destroy` leave it alone.
+
+### An instance with a routed NIC
+
+`task routed` deploys a test instance whose NIC is routed: Incus gives it the
+addresses `203.0.113.N` and `2001:db8:200::N` and a host route for each, Bird
+in `incusdev` learns those routes from the kernel and announces them, and the
+task waits until the ToR pings both from the fabric. It is a container, as in
+`task check`; `--vm` makes it a virtual machine. It stays until you remove it.
+
+```sh
+task routed              # routed1: 203.0.113.1, 2001:db8:200::1
+task routed -- 2 --vm    # routed2, a virtual machine
+task routed -- 2 --delete
+```
+
+Every link that routes is IPv6 only, a virtual machine's too: `task routed`
+has cloud-init give it its two addresses and both default routes by `fe80::1`,
+which Incus puts on the host's side of a routed NIC. IPv4 then travels with
+an IPv6 next hop at every hop:
+
+```
+routed2:       default via inet6 fe80::1 dev eth0
+incusdev:      198.51.100.0/24 via inet6 fe80::1 dev lima0
+incusdev-tor:  203.0.113.2 via inet6 fe80::5055:… dev lima0
+```
+
+`task check` checks the link to the ToR so: no IPv4 address on `lima0`, and
+no IPv4 route over it without an IPv6 next hop.
+
+Any instance can have a routed NIC with addresses from those ranges. A
+container gets its addresses and routes from Incus; a virtual machine
+configures them itself, as `task routed` does.
+
+```sh
+incus config device add v1 eth0 nic nictype=routed \
+	ipv4.address=203.0.113.20 ipv6.address=2001:db8:200::20
+```
+
+From the ToR, `task tor -- shell`, ping one from the fabric:
+`ping -I 198.51.100.1 203.0.113.1`.
+
+### A second host
+
+`INCUSDEV_HOST=2` in front of a task makes it work on `incusdev2`: a second
+Incus host, standalone and not in a cluster with `incusdev`, on the same
+ToR. It has no Ceph, only the local pool, and is ready in about 3 minutes.
+Both hosts sit on the same link, and the ToR passes each one's routes to the
+other, so they reach each other's `incusbr0` and routed NICs through it.
+
+```sh
+INCUSDEV_HOST=2 task up       # the ToR first, if it is not running
+INCUSDEV_HOST=2 task status
+INCUSDEV_HOST=2 task routed   # routed1: 192.0.2.1, 2001:db8:300::1
+INCUSDEV_HOST=2 task check    # also pings incusdev's incusbr0, if it runs
+```
+
+| | `incusdev` | `incusdev2` |
+|---|---|---|
+| AS | 65001 | 65002 |
+| `incusbr0` on macOS | `10.158.42.1/24` | `10.158.43.1/24` |
+| Routed NICs | `203.0.113.0/24`, `2001:db8:200::/48` | `192.0.2.0/24`, `2001:db8:300::/48` |
+| Incus API on this computer | `127.0.0.1:26870` | `127.0.0.1:26873` |
+| Ceph | yes | no |
+
+Each host's source address towards the other is its `incusbr0` address.
+To use one from the other, add it as a remote by that address, for example
+from `incusdev2`: `incus remote add incusdev https://10.158.42.1:8443`.
+
+The ToR and `incusdev` from before this change need `task destroy` and
+`task up -- --tor` to pass routes between hosts: Lima keeps the scripts
+that a VM was made with.
+
+### Settings
+
+The ranges, AS numbers and interfaces are settings of the two scripts, read
+from the environment; Lima runs them with the defaults. On a Debian host
+`provision/bird.sh` peers with a real switch: set `BGP_IFACE` to the NIC
+that faces it, and run it after `incus.sh`. Without that interface it does
+nothing.
+
+| Script | Variable | Default |
+|---|---|---|
+| `bird.sh` | `BGP_IFACE`, `BGP_ASN` | `lima0`, `65001` |
+| `bird.sh` | `BGP_PEER`, `BGP_PEER_ASN` | `fe80::1`, `65000` |
+| `bird.sh` | `BGP_NETWORKS`, the interfaces whose subnets it announces | `incusbr0` |
+| `bird.sh` | `BGP_ROUTED4`, `BGP_ROUTED6` | `203.0.113.0/24`, `2001:db8:200::/48` |
+| `tor.sh` | `TOR_IFACE`, `TOR_ADDRESS`, `TOR_ASN` | `lima0`, `fe80::1`, `65000` |
+| `tor.sh` | `TOR_FABRIC4`, `TOR_FABRIC6` | `198.51.100.1/24`, `2001:db8:100::1/64` |
+
+The first boot of each VM waits about two minutes for DHCP on `lima0`, which
+Lima asks for and the link does not have; the scripts turn it off, and later
+boots take seconds.
+
 ## Directly on a Debian host
 
 On a Debian 13 host with `/dev/kvm`, 2 CPUs and 4 GiB of memory or more:
@@ -200,13 +353,17 @@ The scripts read these from the environment, on a host:
 | `CEPH_IMAGE` | `quay.io/benjamin_holmes/ceph-aio:v20` | The Ceph container image |
 | `OSD_SIZE` | `10G` | Size of the Ceph disk, on the first run |
 | `INCUSDEV_USER` | who called `sudo` | The user for `incus-admin` and Podman |
+| `INCUS_SUBNET` | `10.158.42.1/24` | `incusbr0`'s subnet where Incus finds no free one |
+| `INCUSDEV_CEPH` | `yes` | `no` makes `ceph.sh` do nothing |
 
 ```sh
 sudo OSD_SIZE=20G provision/ceph.sh
 ```
 
-Lima runs the scripts with the defaults. To change one for the VM, change it
-at the top of the script before `task up`.
+In a VM, the scripts read what differs between `incusdev` and `incusdev2`
+from `/etc/default/incusdev-vm`, which Lima writes from `param` in
+`lima.yaml`; `task up` sets those. To change another one for the VM, change
+it at the top of the script before `task up`.
 
 ## How it is built
 
@@ -214,9 +371,13 @@ at the top of the script before `task up`.
 provision/incus.sh      installs Incus; runs on a Debian host or in the VM
 provision/ceph.sh       installs Ceph and joins it to Incus; same
 provision/check.sh      the end-to-end test; same
-lima.yaml               the VM: image, size, the two scripts, port forwards
+provision/bird.sh       Bird2 peering with a ToR; same, with BGP_IFACE
+provision/tor.sh        the simulated ToR, in its own VM
+lima.yaml               the VM: image, size, the scripts, port forwards
+tor.yaml                the ToR's VM
 Taskfile.yml            the tasks; each one calls a script in bin/
 bin/                    one script per task, for the Lima VM
+share/incusdev-vm/      the functions that the scripts in bin/ share
 Brewfile                the tools
 renovate.json           lets Renovate propose newer versions
 docs/                   the details

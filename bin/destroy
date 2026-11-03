@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 #
-# Deletes the VM and everything in it, the copy saved for "task reset", and
-# the incus remote that bin/dash-incus added for it.
+# Deletes the VM and everything in it, the copy saved for "task reset", the
+# ToR if there is one and the other host does not have it, and the incus
+# remote that bin/dash-incus added for it. The link to the ToR, from
+# "task p2p", stays.
 #
 
-source "${0%/*}/functions.sh" || exit $?
-
-# Ends the web UI session of bin/dash-incus, if there is one.
-pkill -f "incus webui $name:"
+source "${0%/*}/../share/incusdev-vm/incusdev-vm.sh" || exit $?
 
 if vm_exists; then
 	log "Deleting $name ..."
@@ -15,9 +14,17 @@ if vm_exists; then
 		fail "Deleting $name failed!"
 fi
 
-if base_exists; then
+if vm_exists "$base"; then
 	limactl delete --force "$base" >/dev/null 2>&1 ||
 		fail "Deleting $base failed!"
+fi
+
+if vm_exists "$tor" && other_host vm_exists; then
+	log "Keeping $tor: another host has it."
+elif vm_exists "$tor"; then
+	log "Deleting $tor ..."
+	limactl delete --force "$tor" >/dev/null 2>&1 ||
+		fail "Deleting $tor failed!"
 fi
 
 if command -v incus >/dev/null; then

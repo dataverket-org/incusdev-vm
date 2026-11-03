@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+#
+# Deploys a test instance with a routed NIC, as "task check" does, and waits
+# until the ToR reaches both its addresses, which Bird on the host announces.
+# The instance stays until --delete.
+#
+
+source "${0%/*}/../share/incusdev-vm/incusdev-vm.sh" || exit $?
+
+n=1
+vm=""
+delete=""
+
+#
+# Prints usage information for task routed.
+#
+function usage()
+{
+	cat <<USAGE
+usage: task routed [-- [OPTIONS] [N]]
+
+N, from 1 to 253 (default: 1), names the instance routedN and picks its
+addresses: $routed4.N and $routed6::N on $name.
+
+Options:
+
+	    --vm		A virtual machine in place of a container
+	    --delete		Removes routedN
+	-h, --help		Prints this message
+
+Examples:
+
+	$ task routed			routed1: $routed4.1, $routed6::1
+	$ task routed -- 3 --vm		routed3, a virtual machine
+	$ task routed -- 2 --delete	removes routed2
+	$ INCUSDEV_HOST=2 task routed	routed1 on incusdev2
+
+USAGE
+}
+
+#
+# Parses command-line options for task routed.
+#
+function parse_options()
+{
+	local argv=()
+
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+			--vm)
+				vm="--vm"
+				shift
+				;;
+			--delete)
+				delete=1
+				shift
+				;;
+			-h|--help)
+				usage
+				exit
+				;;
+			-*)
+				echo "routed: unrecognized option $1" >&2
+				return 1
+				;;
+			*)
+				argv+=("$1")
+				shift
+				;;
+		esac
+	done
+
+	case ${#argv[*]} in
+		0)	;;
+		1)	n="${argv[0]}" ;;
+		*)
+			echo "routed: too many arguments: ${argv[*]}" >&2
+			return 1
+			;;
+	esac
+
+	case "$n" in
+		*[!0-9]*|"")
+			echo "routed: N is a number, not $n" >&2
+			return 1
+			;;
+	esac
+	if (( n < 1 || n > 253 )); then
+		echo "routed: N is from 1 to 253, not $n" >&2
+		return 1
+	fi
+}
+
+parse_options "$@" || exit $?
+instance="routed$n"
+
+check_tor_running || exit $?
+
+if [[ -n "$delete" ]]; then
+	log "Deleting $instance ..."
+	guest incus delete --force "$instance" ||
+		fail "Deleting $instance failed!"
+	exit
+fi
+
+if guest incus info "$instance" >/dev/null 2>&1; then
+	fail "$instance exists already. Remove it: task routed -- $n --delete"
+fi
+
+launch_routed "$instance" "$n" "$vm" || fail "Launching $instance failed!"
+wait_for_routed "$n" "$vm"           || fail "$tor does not reach $instance!"
+
+log "$instance answers the ToR on $routed4.$n and $routed6::$n."
+log "In it: limactl shell $name incus exec $instance -- sh"
