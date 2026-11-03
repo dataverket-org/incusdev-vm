@@ -9,6 +9,11 @@ source "${0%/*}/../share/incusdev-vm/incusdev-vm.sh" || exit $?
 
 url="https://127.0.0.1:$ceph_port/"
 
+case "$(uname -s)" in
+	Darwin)	opener="open" ;;
+	*)	opener="xdg-open" ;;
+esac
+
 [[ -n "$with_ceph" ]] || fail "$name has no Ceph!"
 check_running || exit $?
 

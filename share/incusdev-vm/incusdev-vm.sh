@@ -12,7 +12,6 @@ case "${INCUSDEV_HOST:-1}" in
 		routed4="203.0.113"
 		routed6="2001:db8:200"
 		incus_port=26870
-		ui_host="127.0.0.1"
 		with_ceph=1
 		;;
 	2)
@@ -22,7 +21,6 @@ case "${INCUSDEV_HOST:-1}" in
 		routed4="192.0.2"
 		routed6="2001:db8:300"
 		incus_port=26873
-		ui_host="localhost"
 		with_ceph=""
 		;;
 	*)
@@ -31,15 +29,6 @@ case "${INCUSDEV_HOST:-1}" in
 		;;
 esac
 hosts="incusdev incusdev2"
-
-# Browsers keep cookies per hostname, not per port: each host's web UI has
-# a hostname of its own for the auth_token cookie of "incus webui".
-webui_log="${TMPDIR:-/tmp}/$name-webui.log"
-
-case "$(uname -s)" in
-	Darwin)	opener="open" ;;
-	*)	opener="xdg-open" ;;
-esac
 
 # The order of portForwards in lima.yaml. incusdev2 has the Ceph ports with
 # nothing behind them.
