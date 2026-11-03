@@ -23,6 +23,11 @@ the `incus` client that the Brewfile installs:
 3. The client stays in the background, because the page works through it.
    The session lasts until `task down` or `task destroy`.
 
+The page keeps its login in a cookie, and browsers keep cookies per
+hostname, not per port. So `incusdev2`'s web UI, from
+`INCUSDEV_HOST=2 task dashboard`, opens at `localhost` and `incusdev`'s at
+`127.0.0.1`: both stay logged in side by side.
+
 The remote `incusdev` belongs to this project. The script replaces it when it
 stops working, which happens when the VM is deleted and made again, and
 `task destroy` removes it.

@@ -4,8 +4,8 @@
 #
 # This script owns the remote named incusdev in your incus client
 # configuration: it adds it, and replaces it when it no longer works, as after
-# "task destroy". "incus webui" then opens the browser and stays in the
-# background, since the page works through it. "task down" ends it.
+# "task destroy". "incus webui" stays in the background, since the page works
+# through it. "task down" ends it.
 #
 
 source "${0%/*}/../share/incusdev-vm/incusdev-vm.sh" || exit $?
@@ -60,16 +60,27 @@ function ensure_remote()
 }
 
 #
-# Starts "incus webui" in the background, in place of an earlier one. It
-# opens the browser by itself.
+# Starts "incus webui" in the background, in place of an earlier one, and
+# opens the URL it prints, with its token, at this host's $ui_host.
 #
 function open_webui()
 {
-	pkill -f "incus webui $name:"
-	nohup incus webui "$name:" >/dev/null 2>&1 </dev/null &
+	local pattern='http://127\.0\.0\.1:[0-9]*/ui?auth_token=[^ ]*'
+	local tries=20 pid url
 
-	sleep 1
-	kill -0 "$!" 2>/dev/null || return 1
+	pkill -f "incus webui $name:"
+	( umask 077 && : > "$webui_log" ) || return $?
+	BROWSER=none nohup incus webui "$name:" > "$webui_log" 2>&1 </dev/null &
+	pid=$!
+
+	until url="$(grep -o "$pattern" "$webui_log")"; do
+		kill -0 "$pid" 2>/dev/null || return 1
+		(( tries-- > 0 ))          || return 1
+		sleep 0.5
+	done
+
+	command -v "$opener" >/dev/null || return 1
+	"$opener" "${url/127.0.0.1/$ui_host}" || return $?
 }
 
 check_running || exit $?
