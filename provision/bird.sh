@@ -163,10 +163,9 @@ EOF
 }
 
 #
-# Masquerades the Incus networks only where they leave by the default route,
-# to the internet, and not towards the switch: the switch routes them, and a
-# host behind it answers their own addresses. Incus's NAT, which would hide
-# them behind that route's address, is turned off; a unit loads the rule at
+# Masquerades the Incus networks only out the default route. Towards the
+# switch they keep their addresses, which it routes. Incus's NAT, which
+# masquerades everywhere, is turned off; bird-nat.service loads the rule at
 # boot.
 #
 function configure_nat()
@@ -226,11 +225,9 @@ EOF
 }
 
 #
-# Writes the Bird configuration and has Bird read it. The router ID is the
-# first network's IPv4 address: eth0 has the same address in every Lima VM,
-# the switch's among them. For the same reason this host sends from the first
-# network's addresses by the routes from the switch, as lima0 has none of its
-# own: so another host behind the switch can answer.
+# Writes the Bird configuration and has Bird read it. The first network's
+# addresses are the router ID and the source on routes from the switch:
+# eth0 has the same address in every Lima VM, and lima0 has none.
 #
 function configure_bird()
 {
@@ -320,7 +317,7 @@ protocol bgp tor {
 EOF
 	(( ! changed )) && systemctl is-active -q bird && return
 
-	log "Configuring Bird: AS $asn, the switch $peer%$iface in AS $peer_asn ..."
+	log "Configuring Bird: AS $asn, peer $peer%$iface in AS $peer_asn ..."
 	chown root:bird "$bird" || return $?
 	systemctl enable bird   || return $?
 	systemctl restart bird  || return $?

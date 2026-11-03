@@ -154,12 +154,12 @@ network:
       - "$fabric4"
       - "$fabric6"
 EOF
-	if (( ! changed )) &&
-	   ip -br address show dev fabric0 2>/dev/null | grep -qF " $fabric4 "; then
+	if (( ! changed )) && ip -br address show dev fabric0 2>/dev/null |
+	                      grep -qF " $fabric4 "; then
 		return
 	fi
 
-	log "Adding $address on $iface, and the fabric $fabric4 and $fabric6 ..."
+	log "Adding $address on $iface, the fabric $fabric4 and $fabric6 ..."
 	netplan apply || return $?
 }
 

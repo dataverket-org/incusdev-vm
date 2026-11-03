@@ -22,7 +22,8 @@ function trust_token()
 	# shellcheck disable=SC2016
 	guest sudo bash -c '
 		incus config trust list -f json |
-		jq -r --arg name "$1" ".[] | select(.name == \$name) | .fingerprint" |
+		jq -r --arg name "$1" \
+			".[] | select(.name == \$name) | .fingerprint" |
 		while read -r fingerprint; do
 			incus config trust remove "$fingerprint" || exit 1
 		done
@@ -38,13 +39,14 @@ function trust_token()
 #
 function ensure_remote()
 {
-	local token
+	local token default
 
 	incus query "$name:/1.0/instances" >/dev/null 2>&1 </dev/null && return
 
 	if incus remote list -f csv </dev/null | grep -q "^${name}[ ,]"; then
 		log "Replacing the incus remote $name ..."
-		if [[ "$(incus remote get-default </dev/null)" == "$name" ]]; then
+		default="$(incus remote get-default </dev/null)"
+		if [[ "$default" == "$name" ]]; then
 			incus remote switch local </dev/null || return $?
 		fi
 		incus remote remove "$name" </dev/null || return $?

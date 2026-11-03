@@ -11,6 +11,18 @@ function log()
 }
 
 #
+# Prints a warning message.
+#
+function warn()
+{
+	if [[ -t 2 ]]; then
+		echo -e "\x1b[1m\x1b[33m***\x1b[0m \x1b[1m$1\x1b[0m" >&2
+	else
+		echo "*** $1" >&2
+	fi
+}
+
+#
 # Prints an error message.
 #
 function error()
@@ -27,6 +39,6 @@ function error()
 #
 function fail()
 {
-	error "$1"
+	error "$*"
 	exit 1
 }

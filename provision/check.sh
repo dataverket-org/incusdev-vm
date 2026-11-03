@@ -1,21 +1,12 @@
 #!/usr/bin/env bash
 #
-# Tests the testbed end to end, on the machine it is installed on. Run it as
-# root, after incus.sh and ceph.sh:
+# Tests the testbed end to end, on the machine it is installed on: Ceph, the
+# kernel mapping an RBD image, an Incus instance that boots from the ceph
+# pool and gets an address, and the service ports. It removes what it makes,
+# and force-deletes any instance named incusdev-check. Run it as root, after
+# incus.sh and ceph.sh:
 #
-#   sudo provision/check.sh
-#
-# It checks Ceph, the kernel mapping an RBD image, an Incus instance that
-# boots from the ceph pool and gets an address, and the three service
-# ports. The instance is a container, which needs no nested
-# virtualization; with --vm it is a virtual machine, and KVM is checked
-# first. It removes what it makes, and force-deletes any instance named
-# incusdev-check.
-#
-#   sudo provision/check.sh --vm
-#
-# With --no-ceph, for a host without Ceph as incusdev2, it skips Ceph and
-# its services, and the instance boots from the local pool.
+#   sudo provision/check.sh [--vm] [--no-ceph]
 #
 
 export HOME=/root
@@ -25,6 +16,7 @@ image="images:alpine/3.21"
 rbd_image="incus/incusdev-check"
 mode="container"
 ceph=1
+pool="ceph"
 
 #
 # Prints a log message.
@@ -102,7 +94,8 @@ function wait_for_pool()
 {
 	local tries=36
 
-	until incus storage list -f csv </dev/null | grep -q '^ceph,.*,CREATED'; do
+	until incus storage list -f csv </dev/null |
+	      grep -q '^ceph,.*,CREATED'; do
 		(( tries-- > 0 )) || return 1
 		sleep 5
 	done
@@ -181,7 +174,8 @@ function check_signed()
 	local keys
 
 	keys="$(radosgw-admin user info --uid "$user" 2>/dev/null |
-		jq -r '.keys[0] | "\(.access_key):\(.secret_key)"')" || return $?
+		jq -r '.keys[0] | "\(.access_key):\(.secret_key)"')" ||
+		return $?
 	check_url "$url" "$expected" \
 		--aws-sigv4 "aws:amz:us-east-1:s3" --user "$keys" || return $?
 }
@@ -223,46 +217,90 @@ function check_services()
 	check_signed incusdev       "$admin" 403               || return $?
 }
 
-for arg in "$@"; do
-	case "$arg" in
-		--vm)		mode="vm" ;;
-		--no-ceph)	ceph="" ;;
-		*)		fail "check.sh: unknown argument $arg; the options are --vm and --no-ceph" ;;
-	esac
-done
+#
+# Prints usage information for check.sh.
+#
+function usage()
+{
+	cat <<USAGE
+usage: check.sh [OPTIONS]
+
+Options:
+
+	    --vm		A virtual machine in place of a container, which
+				needs nested virtualization
+	    --no-ceph		Skips Ceph and its services; the instance boots
+				from the local pool
+	-h, --help		Prints this message
+
+USAGE
+}
+
+#
+# Parses command-line options for check.sh.
+#
+function parse_options()
+{
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+			--vm)
+				mode="vm"
+				shift
+				;;
+			--no-ceph)
+				ceph=""
+				pool="local"
+				shift
+				;;
+			-h|--help)
+				usage
+				exit
+				;;
+			*)
+				echo "check.sh: unrecognized option $1" >&2
+				return 1
+				;;
+		esac
+	done
+}
+
+parse_options "$@" || exit $?
 
 [[ $EUID -eq 0 ]] || fail "Run this as root!"
 command -v incus >/dev/null || fail "Incus is not installed: run incus.sh!"
-[[ -z "$ceph" ]] || command -v ceph >/dev/null ||
+if [[ -n "$ceph" ]] && ! command -v ceph >/dev/null; then
 	fail "Ceph is not installed: run ceph.sh!"
+fi
 
 if [[ "$mode" == vm ]]; then
 	log "Checking KVM ..."
-	check_kvm || fail "No KVM here: Incus cannot run virtual machines! Without --vm the test uses a container."
+	check_kvm || fail "No KVM: Incus cannot run virtual machines here!"
 else
 	log "Checking that Incus runs containers ..."
 	check_lxc || fail "Incus has no LXC driver!"
 fi
+
 if [[ -n "$ceph" ]]; then
 	log "Checking Ceph ..."
-	check_ceph    || fail "Ceph does not answer client.incus, or has errors!"
+	check_ceph    || fail "Ceph has errors, or refuses client.incus!"
 	log "Mapping an RBD image with the kernel ..."
 	check_rbd_map || fail "The kernel cannot map an RBD image!"
 	log "Waiting for the ceph pool in Incus ..."
 	wait_for_pool || fail "Incus does not have the ceph pool!"
 fi
-pool="ceph"
-[[ -n "$ceph" ]] || pool="local"
-log "Launching $instance from $image on the $pool pool, as a ${mode/vm/virtual machine} ..."
-launch_instance    || fail "Launching $instance failed!"
-wait_for_instance  || fail "$instance did not come up!"
+
+kind="${mode/vm/virtual machine}"
+log "Launching $instance from $image on the $pool pool, as a $kind ..."
+launch_instance   || fail "Launching $instance failed!"
+wait_for_instance || fail "$instance did not come up!"
 if [[ -n "$ceph" ]]; then
 	log "Checking the RBD images behind $instance ..."
-	check_instance_rbd || fail "$instance does not run from mapped RBD images!"
+	check_instance_rbd || fail "$instance does not run from RBD images!"
 fi
 incus delete --force "$instance" </dev/null ||
 	fail "Deleting $instance failed!"
+
 log "Checking the services ..."
-check_services     || fail "A service does not answer!"
+check_services || fail "A service does not answer!"
 
 log "All good."

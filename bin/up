@@ -1,33 +1,86 @@
 #!/usr/bin/env bash
 #
-# Creates the VM on the first run and starts it on later runs. It returns at
-# once and the work goes on in the background: "task status" follows it.
-#
-# Lima runs the scripts in provision/ that lima.yaml lists on every start,
-# so the first start is the install, about 6 minutes. It ends with one
-# restart: the VM is stopped, and a copy of it is saved for "task reset".
-# Arguments go to limactl when the VM is created:
-#
-#   task up -- --cpus 4 --memory 8 --disk 40
-#
-# With INCUS_SRC set, a new VM gets that directory mounted, writable and at
-# the same path.
-#
-# With --tor, on macOS, a new VM gets a simulated top-of-rack switch: a
-# second VM, incusdev-tor, with Bird2, on a point-to-point link to incusdev,
-# which runs Bird2 too. "task p2p" lays the link first. Later starts, and
-# "task reset", keep the switch; "task destroy" removes it:
-#
-#   task up -- --tor
-#
-# With INCUSDEV_HOST=2 it makes or starts incusdev2 instead: a second Incus
-# host, standalone, without Ceph, on the same ToR, which it starts or makes
-# first. A new incusdev2 is ready in about 3 minutes:
-#
-#   INCUSDEV_HOST=2 task up
+# Creates the VM on the first run and starts it on later runs, in the
+# background: "task status" follows it. The first start is the install, and
+# ends with one restart, after which a copy is saved for "task reset". Lima
+# runs the scripts in provision/ that lima.yaml lists on every start.
 #
 
 source "${0%/*}/../share/incusdev-vm/incusdev-vm.sh" || exit $?
+
+in_background=""
+with_tor=""
+limactl_args=()
+
+#
+# Prints usage information for task up.
+#
+function usage()
+{
+	cat <<USAGE
+usage: task up [-- OPTIONS]
+
+Options:
+
+	    --tor		A new VM gets the link to the ToR, on macOS,
+				which "task p2p" lays first. incusdev2 always
+				has it.
+	    --cpus N		CPUs of a new VM (default: 2)
+	    --memory GIB	Memory of a new VM (default: 2)
+	    --disk GIB		Disk of a new VM (default: 20)
+	-h, --help		Prints this message
+	--			Hands the rest to limactl, for a new VM
+
+Environment:
+
+	INCUSDEV_HOST=2		incusdev2 in place of incusdev
+	INCUS_SRC=DIR		Mounts DIR into a new VM, writable, at DIR
+
+Examples:
+
+	$ task up
+	$ task up -- --tor --cpus 4 --memory 8 --disk 40
+	$ INCUSDEV_HOST=2 task up
+
+USAGE
+}
+
+#
+# Parses command-line options for task up. --run is the background half,
+# started by the foreground one.
+#
+function parse_options()
+{
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+			--tor)
+				with_tor=1
+				shift
+				;;
+			--cpus|--memory|--disk)
+				limactl_args+=("$1" "$2")
+				shift 2
+				;;
+			--run)
+				in_background=1
+				shift
+				;;
+			-h|--help)
+				usage
+				exit
+				;;
+			--)
+				shift
+				limactl_args+=("$@")
+				break
+				;;
+			*)
+				echo "up: unrecognized option $1" >&2
+				return 1
+				;;
+		esac
+	done
+}
 
 #
 # Prints the limactl options for this platform: the Virtualization framework
@@ -80,16 +133,13 @@ function start_tor()
 }
 
 #
-# Creates or starts the VM and waits for it. A new VM is stopped once after
-# the install, and a copy of it is saved for "task reset". With a ToR, the
-# ToR starts first, and a new VM gets the link to it. This is what runs in
-# the background.
+# Creates or starts the ToR, then the VM, and waits for them. A new VM is
+# stopped once after the install, and copied for "task reset".
 #
-# One after the other, not side by side: each limactl start stops the
-# socket_vmnet daemons that no VM uses, and a VM being created does not
-# count yet.
+# Not side by side: each limactl start stops the socket_vmnet daemons that
+# no VM uses, and a VM being created does not count yet.
 #
-function run()
+function start_vms()
 {
 	if [[ -n "$with_tor" ]]; then
 		start_tor || return $?
@@ -116,40 +166,42 @@ function run()
 	limactl start --tty=false --timeout 20m "$name" || return $?
 }
 
-# --run, which runs in the background, and --tor may come anywhere; the rest
-# goes to limactl.
-in_background=""
-with_tor=""
-args=()
-for arg in "$@"; do
-	case "$arg" in
-		--run)	in_background=1 ;;
-		--tor)	with_tor=1 ;;
-		*)	args+=("$arg") ;;
-	esac
-done
+#
+# Checks what this computer needs for the VM, and for the ToR when the VM
+# has one. incusdev2 always has it.
+#
+function check_requirements()
+{
+	if ! command -v limactl >/dev/null; then
+		error "limactl not found. Run: brew bundle"
+		return 1
+	fi
+
+	[[ "$name" != "incusdev" ]] && with_tor=1
+	vm_exists "$tor" && with_tor=1
+	[[ -n "$with_tor" ]] || return 0
+
+	if ! has_tor; then
+		error "The ToR needs macOS: Lima links the VMs with feth."
+		return 1
+	fi
+
+	if vm_exists && ! vm_exists "$tor"; then
+		error "$name has no ToR! Run: task destroy, task up -- --tor"
+		return 1
+	fi
+}
+
+parse_options "$@" || exit $?
 
 if [[ -n "$in_background" ]]; then
-	run "${args[@]}"
+	start_vms "${limactl_args[@]}"
 	exit $?
 fi
 
-command -v limactl >/dev/null || fail "limactl not found. Run: brew bundle"
+check_requirements || exit $?
 
-# incusdev2 reaches incusdev only through the ToR.
-if [[ "$name" != "incusdev" ]]; then
-	has_tor || fail "$name needs the ToR, and the ToR needs macOS."
-	with_tor=1
-fi
-
-if [[ -n "$with_tor" ]]; then
-	has_tor || fail "The ToR needs macOS: Lima links the two VMs with feth."
-	vm_exists && ! vm_exists "$tor" &&
-		fail "$name has no ToR. Run 'task destroy' and 'task up -- --tor'!"
-fi
-vm_exists "$tor" && with_tor=1
-
-if up_runs; then
+if   up_runs; then
 	log "$name is starting already. Follow it with: task status"
 	exit
 elif vm_runs && { [[ -z "$with_tor" ]] || vm_runs "$tor"; }; then
@@ -159,21 +211,20 @@ elif vm_runs; then
 	doing="Starting $tor in the background, about 30 seconds."
 elif vm_exists; then
 	doing="Starting $name in the background, about 30 seconds."
+elif [[ "$(uname -s)" == "Linux" && ! -w /dev/kvm ]]; then
+	fail "/dev/kvm is missing or not writable!"
+elif [[ -n "$with_ceph" ]]; then
+	doing="Creating $name in the background, about 6 minutes."
 else
-	if [[ "$(uname -s)" == "Linux" && ! -w /dev/kvm ]]; then
-		fail "/dev/kvm is missing or not writable!"
-	fi
-
-	minutes=6
-	[[ -n "$with_ceph" ]] || minutes=3
-	doing="Creating $name in the background, about $minutes minutes."
+	doing="Creating $name in the background, about 3 minutes."
 fi
 
 if [[ -n "$with_tor" ]]; then
 	check_p2p || exit $?
 fi
 
-nohup "$0" --run ${with_tor:+--tor} "${args[@]}" > "$up_log" 2>&1 </dev/null &
+nohup "$0" --run ${with_tor:+--tor} -- "${limactl_args[@]}" \
+	> "$up_log" 2>&1 </dev/null &
 echo "$!" > "$up_pid" || fail "Writing $up_pid failed!"
 
 log "$doing"

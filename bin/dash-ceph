@@ -14,7 +14,7 @@ case "$(uname -s)" in
 	*)	opener="xdg-open" ;;
 esac
 
-[[ -n "$with_ceph" ]] || fail "$name has no Ceph."
+[[ -n "$with_ceph" ]] || fail "$name has no Ceph!"
 check_running || exit $?
 
 password="$(guest sudo cat /etc/ceph/dashboard.password 2>/dev/null)" ||

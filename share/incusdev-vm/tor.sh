@@ -33,7 +33,7 @@ function check_p2p()
 {
 	feth_ready && networks_ready && return
 
-	error "The link to the ToR is not there; a restart of the Mac removes it."
+	error "The link to the ToR is gone, as after a restart of the Mac."
 	error "Lay it with: task p2p"
 	return 1
 }
@@ -90,13 +90,13 @@ function print_tor()
 
 	log "The ToR:"
 	if ! vm_runs "$tor"; then
-		printf "  %-18s %-27s %-5s %s\n" "$tor" "stopped" "down" "task up"
+		print_row "$tor" "stopped" "down" "task up"
 		return
 	fi
 
 	[[ "$(bgp_state)" == "Established" ]] && state="up"
-	printf "  %-18s %-27s %-5s %s\n" "BGP session" "fe80::1%lima0, AS 65000" \
-		"$state" "task tor shows the routes"
+	print_row "BGP session" "fe80::1%lima0, AS 65000" "$state" \
+		"task tor shows the routes"
 }
 
 #
@@ -157,12 +157,10 @@ EOF
 }
 
 #
-# Launches an instance with a routed NIC on N in this host's ranges, from N
-# between 1 and 254: 203.0.113.N and 2001:db8:200::N on incusdev,
-# 192.0.2.N and 2001:db8:300::N on incusdev2. Bird on the host announces
-# both addresses to the ToR. It is a container, or with --vm a virtual machine.
-# A container gets its addresses and routes from Incus, a virtual machine
-# from cloud-init. The instance is removed if it does not start.
+# Launches an instance with a routed NIC on $routed4.N and $routed6::N, N
+# from 1 to 254: a container, or with --vm a virtual machine, which takes
+# its addresses from cloud-init. The instance is removed if it does not
+# start.
 #
 function launch_routed()
 {
