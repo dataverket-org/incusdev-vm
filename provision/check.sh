@@ -14,6 +14,9 @@
 #
 #   sudo provision/check.sh --vm
 #
+# With --no-ceph, for a host without Ceph as incusdev2, it skips Ceph and
+# its services, and the instance boots from the local pool.
+#
 
 export HOME=/root
 
@@ -21,6 +24,7 @@ instance="incusdev-check"
 image="images:alpine/3.21"
 rbd_image="incus/incusdev-check"
 mode="container"
+ceph=1
 
 #
 # Prints a log message.
@@ -105,18 +109,20 @@ function wait_for_pool()
 }
 
 #
-# Launches the instance with its root disk on Ceph: a container, or with
-# --vm a virtual machine, without secure boot since the image is unsigned.
+# Launches the instance with its root disk on Ceph, or the local pool with
+# --no-ceph: a container, or with --vm a virtual machine, without secure boot
+# since the image is unsigned.
 #
 function launch_instance()
 {
-	local options=()
+	local options=() root="root-ceph"
 
 	[[ "$mode" == vm ]] &&
 		options=(--vm --config security.secureboot=false)
+	[[ -n "$ceph" ]] || root="root-local"
 	incus delete --force "$instance" </dev/null >/dev/null 2>&1
 	incus launch --quiet "$image" "$instance" "${options[@]}" \
-		--profile default --profile root-ceph </dev/null || return $?
+		--profile default --profile "$root" </dev/null || return $?
 }
 
 #
@@ -198,7 +204,8 @@ function check_dashboard_login()
 
 #
 # Checks the services on their ports, the dashboard's login, and that the
-# RadosGW admin API lets the admin user in and refuses the S3 user.
+# RadosGW admin API lets the admin user in and refuses the S3 user. Without
+# Ceph, only Incus's.
 #
 function check_services()
 {
@@ -206,6 +213,8 @@ function check_services()
 
 	check_url https://127.0.0.1:8443/1.0 200 || return $?
 	check_url https://127.0.0.1:8443/ui/ 200 || return $?
+	[[ -n "$ceph" ]] || return 0
+
 	check_url https://127.0.0.1:8444/    200 || return $?
 	check_dashboard_login                    || return $?
 
@@ -216,14 +225,16 @@ function check_services()
 
 for arg in "$@"; do
 	case "$arg" in
-		--vm)	mode="vm" ;;
-		*)	fail "check.sh: unknown argument $arg; the one option is --vm" ;;
+		--vm)		mode="vm" ;;
+		--no-ceph)	ceph="" ;;
+		*)		fail "check.sh: unknown argument $arg; the options are --vm and --no-ceph" ;;
 	esac
 done
 
 [[ $EUID -eq 0 ]] || fail "Run this as root!"
 command -v incus >/dev/null || fail "Incus is not installed: run incus.sh!"
-command -v ceph >/dev/null  || fail "Ceph is not installed: run ceph.sh!"
+[[ -z "$ceph" ]] || command -v ceph >/dev/null ||
+	fail "Ceph is not installed: run ceph.sh!"
 
 if [[ "$mode" == vm ]]; then
 	log "Checking KVM ..."
@@ -232,17 +243,23 @@ else
 	log "Checking that Incus runs containers ..."
 	check_lxc || fail "Incus has no LXC driver!"
 fi
-log "Checking Ceph ..."
-check_ceph         || fail "Ceph does not answer client.incus, or has errors!"
-log "Mapping an RBD image with the kernel ..."
-check_rbd_map      || fail "The kernel cannot map an RBD image!"
-log "Waiting for the ceph pool in Incus ..."
-wait_for_pool      || fail "Incus does not have the ceph pool!"
-log "Launching $instance from $image on the ceph pool, as a ${mode/vm/virtual machine} ..."
+if [[ -n "$ceph" ]]; then
+	log "Checking Ceph ..."
+	check_ceph    || fail "Ceph does not answer client.incus, or has errors!"
+	log "Mapping an RBD image with the kernel ..."
+	check_rbd_map || fail "The kernel cannot map an RBD image!"
+	log "Waiting for the ceph pool in Incus ..."
+	wait_for_pool || fail "Incus does not have the ceph pool!"
+fi
+pool="ceph"
+[[ -n "$ceph" ]] || pool="local"
+log "Launching $instance from $image on the $pool pool, as a ${mode/vm/virtual machine} ..."
 launch_instance    || fail "Launching $instance failed!"
 wait_for_instance  || fail "$instance did not come up!"
-log "Checking the RBD images behind $instance ..."
-check_instance_rbd || fail "$instance does not run from mapped RBD images!"
+if [[ -n "$ceph" ]]; then
+	log "Checking the RBD images behind $instance ..."
+	check_instance_rbd || fail "$instance does not run from mapped RBD images!"
+fi
 incus delete --force "$instance" </dev/null ||
 	fail "Deleting $instance failed!"
 log "Checking the services ..."

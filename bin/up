@@ -20,6 +20,12 @@
 #
 #   task up -- --tor
 #
+# With INCUSDEV_HOST=2 it makes or starts incusdev2 instead: a second Incus
+# host, standalone, without Ceph, on the same ToR, which it starts or makes
+# first. A new incusdev2 is ready in about 3 minutes:
+#
+#   INCUSDEV_HOST=2 task up
+#
 
 source "${0%/*}/../share/incusdev-vm/incusdev-vm.sh" || exit $?
 
@@ -34,6 +40,25 @@ function platform_options()
 		Linux)	echo "--vm-type=qemu" ;;
 		*)	return 1 ;;
 	esac
+}
+
+#
+# Prints the yq expression that gives a new VM this host's settings: the
+# params that the provision scripts read, and the ports on this computer.
+#
+function lima_settings()
+{
+	local ceph="no"
+
+	[[ -n "$with_ceph" ]] && ceph="yes"
+	echo ".param.INCUS_SUBNET = \"$bridge_subnet\" |" \
+	     ".param.INCUSDEV_CEPH = \"$ceph\" |" \
+	     ".param.BGP_ASN = \"$asn\" |" \
+	     ".param.BGP_ROUTED4 = \"$routed4.0/24\" |" \
+	     ".param.BGP_ROUTED6 = \"$routed6::/48\" |" \
+	     ".portForwards[0].hostPort = $incus_port |" \
+	     ".portForwards[1].hostPort = $ceph_port |" \
+	     ".portForwards[2].hostPort = $s3_port"
 }
 
 #
@@ -81,7 +106,7 @@ function run()
 	limactl start --tty=false --timeout 20m --name "$name" \
 		$(platform_options) ${incus_src:+--mount "$incus_src:w"} \
 		${with_tor:+--network "lima:$p2p_network"} \
-		"$@" "$root/lima.yaml" || return $?
+		--set "$(lima_settings)" "$@" "$root/lima.yaml" || return $?
 
 	log "Saving a copy of $name for 'task reset', and restarting it ..."
 	limactl stop "$name" || return $?
@@ -111,6 +136,12 @@ fi
 
 command -v limactl >/dev/null || fail "limactl not found. Run: brew bundle"
 
+# incusdev2 reaches incusdev only through the ToR.
+if [[ "$name" != "incusdev" ]]; then
+	has_tor || fail "$name needs the ToR, and the ToR needs macOS."
+	with_tor=1
+fi
+
 if [[ -n "$with_tor" ]]; then
 	has_tor || fail "The ToR needs macOS: Lima links the two VMs with feth."
 	vm_exists && ! vm_exists "$tor" &&
@@ -133,7 +164,9 @@ else
 		fail "/dev/kvm is missing or not writable!"
 	fi
 
-	doing="Creating $name in the background, about 6 minutes."
+	minutes=6
+	[[ -n "$with_ceph" ]] || minutes=3
+	doing="Creating $name in the background, about $minutes minutes."
 fi
 
 if [[ -n "$with_tor" ]]; then
@@ -144,5 +177,5 @@ nohup "$0" --run ${with_tor:+--tor} "${args[@]}" > "$up_log" 2>&1 </dev/null &
 echo "$!" > "$up_pid" || fail "Writing $up_pid failed!"
 
 log "$doing"
-[[ -n "$with_tor" ]] && ! vm_runs && log "$tor, the ToR, starts first."
+[[ -n "$with_tor" ]] && ! vm_runs "$tor" && log "$tor, the ToR, starts first."
 log "Follow it with: task status"

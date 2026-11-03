@@ -1,12 +1,23 @@
 #
-# Waits until the three service ports answer on this computer.
+# Prints the URLs of the services on this computer: the Incus API, and the
+# Ceph dashboard and the S3 API on a host with Ceph.
+#
+function service_urls()
+{
+	echo "https://127.0.0.1:$incus_port"
+	[[ -n "$with_ceph" ]] || return 0
+	echo "https://127.0.0.1:$ceph_port"
+	echo "http://127.0.0.1:$s3_port"
+}
+
+#
+# Waits until the service ports answer on this computer.
 #
 function wait_for_services()
 {
 	local tries=12 url
 
-	for url in https://127.0.0.1:26870 https://127.0.0.1:26871 \
-	           http://127.0.0.1:26872; do
+	for url in $(service_urls); do
 		until curl -k -s -o /dev/null --max-time 3 "$url"; do
 			(( tries-- > 0 )) || return 1
 			sleep 5
@@ -21,7 +32,14 @@ function wait_for_services()
 #
 function print_services()
 {
-	local service url hint state
+	local service url hint state services
+
+	services="Incus_API https://127.0.0.1:$incus_port task_dashboard_adds_the_incus_remote
+Incus_web_UI https://127.0.0.1:$incus_port/ui/ task_dashboard_--_incus"
+	[[ -n "$with_ceph" ]] && services+="
+Ceph_dashboard https://127.0.0.1:$ceph_port task_dashboard_--_ceph
+S3_API http://127.0.0.1:$s3_port task_s3-credentials
+RadosGW_admin_API http://127.0.0.1:$s3_port/admin task_s3-credentials_--_admin"
 
 	log "Services on this computer:"
 	while read -r service url hint; do
@@ -29,12 +47,6 @@ function print_services()
 		curl -k -s -o /dev/null --max-time 3 "$url" && state="up"
 		printf "  %-18s %-27s %-5s %s\n" \
 			"${service//_/ }" "$url" "$state" "${hint//_/ }"
-	done <<EOF
-Incus_API https://127.0.0.1:26870 task_dashboard_adds_the_incus_remote
-Incus_web_UI https://127.0.0.1:26870/ui/ task_dashboard_--_incus
-Ceph_dashboard https://127.0.0.1:26871 task_dashboard_--_ceph
-S3_API http://127.0.0.1:26872 task_s3-credentials
-RadosGW_admin_API http://127.0.0.1:26872/admin task_s3-credentials_--_admin
-EOF
+	done <<< "$services"
 	echo "  How to log in to each: docs/access.md"
 }

@@ -9,11 +9,16 @@
 # from the environment:
 #
 #   INCUS_CHANNEL   Zabbly channel: lts-7.0 (default), lts-6.0 or stable
+#   INCUS_SUBNET    the bridge's subnet where Incus finds no free one, as in
+#                   a Lima VM on macOS, default 10.158.42.1/24
 #   INCUSDEV_USER   the user that gets the incus-admin group
 #
 
 export DEBIAN_FRONTEND=noninteractive
 export HOME=/root
+
+# A Lima VM has its settings here, written from param in lima.yaml.
+[[ -r /etc/default/incusdev-vm ]] && source /etc/default/incusdev-vm
 
 channel="${INCUS_CHANNEL:-lts-7.0}"
 # INCUSDEV_USER, else who called sudo, else the first user with a home
@@ -22,7 +27,7 @@ user="${INCUSDEV_USER:-${SUDO_USER:-$(getent passwd |
 	awk -F: '$6 ~ /^\/home\// { print $1; exit }')}}"
 
 # The bridge's subnet where Incus finds none, see configure_network.
-subnet="10.158.42.1/24"
+subnet="${INCUS_SUBNET:-10.158.42.1/24}"
 
 keyring="/etc/apt/keyrings/zabbly.asc"
 sources="/etc/apt/sources.list.d/zabbly-incus-$channel.sources"

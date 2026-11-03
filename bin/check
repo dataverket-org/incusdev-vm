@@ -11,14 +11,19 @@
 # ToR pings incusbr0's addresses from the fabric's, over IPv4 and IPv6. Then
 # it launches an instance with a routed NIC, a container or with --vm a
 # virtual machine, and the ToR pings its two addresses, which only Bird on
-# incusdev announces. It removes the instance, and force-deletes any
-# instance named incusdev-routed.
+# the host announces. It removes the instance, and force-deletes any
+# instance named incusdev-routed. When the other host runs too, this one
+# pings its incusbr0 addresses, through the ToR.
+#
+# On incusdev2, which has no Ceph, the instance boots from the local pool:
+#
+#   INCUSDEV_HOST=2 task check
 #
 
 source "${0%/*}/../share/incusdev-vm/incusdev-vm.sh" || exit $?
 
-# The instance with a routed NIC: 203.0.113.254 and 2001:db8:200::254, out
-# of the way of "task routed".
+# The instance with a routed NIC: 203.0.113.254 and 2001:db8:200::254 on
+# incusdev, out of the way of "task routed".
 routed="incusdev-routed"
 routed_n=254
 
@@ -49,6 +54,20 @@ function check_ipv6_link()
 }
 
 #
+# Prints the first global address of incusbr0 in a VM, IPv4 or IPv6 as the
+# family says: 4 or 6.
+#
+function bridge_address()
+{
+	local vm="$1"
+	local family="$2"
+
+	limactl shell --workdir / "$vm" \
+		ip "-$family" -o address show dev incusbr0 scope global </dev/null |
+		awk '{ sub("/.*", "", $4); print $4; exit }'
+}
+
+#
 # Checks the BGP session and the routes it gives both ends.
 #
 function check_tor()
@@ -59,10 +78,8 @@ function check_tor()
 	wait_for_bgp || return $?
 	check_ipv6_link || return $?
 
-	ipv4="$(guest ip -4 -o address show dev incusbr0 |
-		awk '{ sub("/.*", "", $4); print $4; exit }')"
-	ipv6="$(guest ip -6 -o address show dev incusbr0 scope global |
-		awk '{ sub("/.*", "", $4); print $4; exit }')"
+	ipv4="$(bridge_address "$name" 4)"
+	ipv6="$(bridge_address "$name" 6)"
 
 	ping_from_tor 198.51.100.1 "$ipv4" || return $?
 	[[ -z "$ipv6" ]] || ping_from_tor 2001:db8:100::1 "$ipv6" || return $?
@@ -84,11 +101,34 @@ function check_routed()
 	return "$status"
 }
 
+#
+# Has this host ping the other host's incusbr0 addresses, when the other host
+# runs. They go through the ToR, from this host's own incusbr0 addresses.
+#
+function check_other_host()
+{
+	local other vm ipv4 ipv6
+
+	for vm in $hosts; do
+		[[ "$vm" != "$name" ]] && other="$vm"
+	done
+	vm_runs "$other" || return 0
+
+	ipv4="$(bridge_address "$other" 4)"
+	ipv6="$(bridge_address "$other" 6)"
+
+	log "Pinging $other's incusbr0 from $name, through $tor ..."
+	guest ping -c 3 -W 2 "$ipv4" || return $?
+	[[ -z "$ipv6" ]] || guest ping -c 3 -W 2 "$ipv6" || return $?
+}
+
 check_running || exit $?
 
 # The script travels as an argument, since stdin is closed in the VM, and
 # our arguments after it.
-guest sudo bash -c "$(< "$root/provision/check.sh")" bash "$@" ||
+args=("$@")
+[[ -n "$with_ceph" ]] || args+=(--no-ceph)
+guest sudo bash -c "$(< "$root/provision/check.sh")" bash "${args[@]}" ||
 	fail "The test failed inside $name!"
 
 if vm_exists "$tor"; then
@@ -99,6 +139,7 @@ if vm_exists "$tor"; then
 	check_tor          || fail "$tor and $name have no routes to each other!"
 	check_routed "$vm" || fail "$tor has no route to a routed NIC!"
 	log "The ToR and $name route to each other, and to routed NICs."
+	check_other_host   || fail "$name does not reach the other host!"
 fi
 
 print_services | tee /dev/stderr | grep -q " down " &&

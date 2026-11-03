@@ -15,10 +15,14 @@
 #   CEPH_IMAGE      default quay.io/benjamin_holmes/ceph-aio:v20
 #   OSD_SIZE        size of the one OSD, default 10G; counts on the first run
 #   INCUSDEV_USER   the user that runs Podman
+#   INCUSDEV_CEPH   "no" makes it do nothing, as in incusdev2
 #
 
 export DEBIAN_FRONTEND=noninteractive
 export HOME=/root
+
+# A Lima VM has its settings here, written from param in lima.yaml.
+[[ -r /etc/default/incusdev-vm ]] && source /etc/default/incusdev-vm
 
 image="${CEPH_IMAGE:-quay.io/benjamin_holmes/ceph-aio:v20}"
 osd_size="${OSD_SIZE:-10G}"
@@ -348,6 +352,7 @@ function configure_incus_storage()
 		path=/ pool=ceph || return $?
 }
 
+[[ "${INCUSDEV_CEPH:-yes}" == "no" ]] && exit 0
 [[ $EUID -eq 0 ]]       || fail "Run this as root!"
 install_podman          || fail "Installing Podman failed!"
 start_ceph              || fail "Starting the Ceph container failed!"

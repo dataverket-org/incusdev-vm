@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 #
-# Makes this machine a simulated top-of-rack switch for incusdev: Bird2
-# takes BGP sessions on the server port, unnumbered: the port has only
-# IPv6 link-local addresses, among them the fixed fe80::1 that servers
-# connect to, and IPv4 routes travel with IPv6 next hops (RFC 8950). The
-# switch announces the "fabric", a prefix on a dummy interface that stands
-# for the rest of the data centre, and installs what servers announce in the
-# kernel. Run it as root, in the VM of tor.yaml:
+# Makes this machine a simulated top-of-rack switch for incusdev, and for
+# incusdev2 when there is one: Bird2 takes BGP sessions on the server port,
+# unnumbered: the port has only IPv6 link-local addresses, among them the
+# fixed fe80::1 that servers connect to, and IPv4 routes travel with IPv6
+# next hops (RFC 8950). The switch announces the "fabric", a prefix on a
+# dummy interface that stands for the rest of the data centre. It installs
+# what servers announce in the kernel, and passes it on to the other
+# servers. Run it as root, in the VM of tor.yaml:
 #
 #   sudo provision/tor.sh
 #
@@ -197,7 +198,8 @@ protocol kernel {
 }
 
 # The server port, unnumbered: a session for each server that connects from
-# its link-local address, in an AS of its own.
+# its link-local address, in an AS of its own. Each server gets the fabric,
+# and what the others announce: servers reach each other through the switch.
 protocol bgp servers {
 	interface "$iface";
 	local as $asn;
@@ -206,11 +208,11 @@ protocol bgp servers {
 	ipv4 {
 		extended next hop on;
 		import all;
-		export where source = RTS_DEVICE;
+		export where source = RTS_DEVICE || source = RTS_BGP;
 	};
 	ipv6 {
 		import all;
-		export where source = RTS_DEVICE;
+		export where source = RTS_DEVICE || source = RTS_BGP;
 	};
 }
 EOF

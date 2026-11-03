@@ -57,7 +57,7 @@ function check_tor_running()
 }
 
 #
-# Prints the state of incusdev's BGP session to the ToR, as Bird calls it:
+# Prints the state of this host's BGP session to the ToR, as Bird calls it:
 # Established once the two have exchanged routes.
 #
 function bgp_state()
@@ -101,7 +101,7 @@ function print_tor()
 
 #
 # Pings an address from the ToR, from an address of the fabric: the ToR must
-# have a route to it, and incusdev one back.
+# have a route to it, and the host one back.
 #
 function ping_from_tor()
 {
@@ -157,9 +157,10 @@ EOF
 }
 
 #
-# Launches an instance with a routed NIC on 203.0.113.N and
-# 2001:db8:200::N, from N between 1 and 254. Bird on incusdev announces both
-# addresses to the ToR. It is a container, or with --vm a virtual machine.
+# Launches an instance with a routed NIC on N in this host's ranges, from N
+# between 1 and 254: 203.0.113.N and 2001:db8:200::N on incusdev,
+# 192.0.2.N and 2001:db8:300::N on incusdev2. Bird on the host announces
+# both addresses to the ToR. It is a container, or with --vm a virtual machine.
 # A container gets its addresses and routes from Incus, a virtual machine
 # from cloud-init. The instance is removed if it does not start.
 #
@@ -168,8 +169,8 @@ function launch_routed()
 	local instance="$1"
 	local n="$2"
 	local vm="${3:-}"
-	local ipv4="203.0.113.$n"
-	local ipv6="2001:db8:200::$n"
+	local ipv4="$routed4.$n"
+	local ipv6="$routed6::$n"
 	local mac network args=(images:alpine/3.21 "$instance")
 
 	mac="$(printf "10:66:6a:cb:00:%02x" "$n")"
@@ -205,6 +206,6 @@ function wait_for_routed()
 	local seconds=60
 
 	[[ "$vm" == "--vm" ]] && seconds=600
-	wait_from_tor 198.51.100.1 "203.0.113.$n" "$seconds"        || return $?
-	wait_from_tor 2001:db8:100::1 "2001:db8:200::$n" "$seconds" || return $?
+	wait_from_tor 198.51.100.1 "$routed4.$n" "$seconds"    || return $?
+	wait_from_tor 2001:db8:100::1 "$routed6::$n" "$seconds" || return $?
 }
