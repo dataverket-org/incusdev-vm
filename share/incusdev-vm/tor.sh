@@ -33,7 +33,7 @@ function check_p2p()
 {
 	feth_ready && networks_ready && return
 
-	error "The link to the ToR is gone, as after a restart of the Mac."
+	error "The link to the ToR is not there; a restart of the Mac removes it."
 	error "Lay it with: task p2p"
 	return 1
 }
@@ -57,7 +57,7 @@ function check_tor_running()
 }
 
 #
-# Prints the state of this host's BGP session to the ToR, as Bird calls it:
+# Prints the state of incusdev's BGP session to the ToR, as Bird calls it:
 # Established once the two have exchanged routes.
 #
 function bgp_state()
@@ -90,18 +90,18 @@ function print_tor()
 
 	log "The ToR:"
 	if ! vm_runs "$tor"; then
-		print_row "$tor" "stopped" "down" "task up"
+		printf "  %-18s %-27s %-5s %s\n" "$tor" "stopped" "down" "task up"
 		return
 	fi
 
 	[[ "$(bgp_state)" == "Established" ]] && state="up"
-	print_row "BGP session" "fe80::1%lima0, AS 65000" "$state" \
-		"task tor shows the routes"
+	printf "  %-18s %-27s %-5s %s\n" "BGP session" "fe80::1%lima0, AS 65000" \
+		"$state" "task tor shows the routes"
 }
 
 #
 # Pings an address from the ToR, from an address of the fabric: the ToR must
-# have a route to it, and the host one back.
+# have a route to it, and incusdev one back.
 #
 function ping_from_tor()
 {
@@ -157,18 +157,19 @@ EOF
 }
 
 #
-# Launches an instance with a routed NIC on $routed4.N and $routed6::N, N
-# from 1 to 254: a container, or with --vm a virtual machine, which takes
-# its addresses from cloud-init. The instance is removed if it does not
-# start.
+# Launches an instance with a routed NIC on 203.0.113.N and
+# 2001:db8:200::N, from N between 1 and 254. Bird on incusdev announces both
+# addresses to the ToR. It is a container, or with --vm a virtual machine.
+# A container gets its addresses and routes from Incus, a virtual machine
+# from cloud-init. The instance is removed if it does not start.
 #
 function launch_routed()
 {
 	local instance="$1"
 	local n="$2"
 	local vm="${3:-}"
-	local ipv4="$routed4.$n"
-	local ipv6="$routed6::$n"
+	local ipv4="203.0.113.$n"
+	local ipv6="2001:db8:200::$n"
 	local mac network args=(images:alpine/3.21 "$instance")
 
 	mac="$(printf "10:66:6a:cb:00:%02x" "$n")"
@@ -204,6 +205,6 @@ function wait_for_routed()
 	local seconds=60
 
 	[[ "$vm" == "--vm" ]] && seconds=600
-	wait_from_tor 198.51.100.1 "$routed4.$n" "$seconds"    || return $?
-	wait_from_tor 2001:db8:100::1 "$routed6::$n" "$seconds" || return $?
+	wait_from_tor 198.51.100.1 "203.0.113.$n" "$seconds"        || return $?
+	wait_from_tor 2001:db8:100::1 "2001:db8:200::$n" "$seconds" || return $?
 }

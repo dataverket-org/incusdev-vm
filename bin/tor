@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Shows the BGP session between this host and its ToR, and the routes each
+# Shows the BGP session between incusdev and its ToR, and the routes each
 # end has from the other. Without arguments it shows both ends; with
 # "shell" it opens a shell on the ToR instead:
 #

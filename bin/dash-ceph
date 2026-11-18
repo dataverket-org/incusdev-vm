@@ -7,9 +7,13 @@
 
 source "${0%/*}/../share/incusdev-vm/incusdev-vm.sh" || exit $?
 
-url="https://127.0.0.1:$ceph_port/"
+url="https://127.0.0.1:26871/"
 
-[[ -n "$with_ceph" ]] || fail "$name has no Ceph!"
+case "$(uname -s)" in
+	Darwin)	opener="open" ;;
+	*)	opener="xdg-open" ;;
+esac
+
 check_running || exit $?
 
 password="$(guest sudo cat /etc/ceph/dashboard.password 2>/dev/null)" ||

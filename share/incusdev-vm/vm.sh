@@ -20,21 +20,6 @@ function vm_runs()
 }
 
 #
-# Tells whether the test holds for another Incus host than this one, as in
-# "other_host vm_runs": the ToR stays while another host has it.
-#
-function other_host()
-{
-	local test="$1"
-	local vm
-
-	for vm in $hosts; do
-		[[ "$vm" != "$name" ]] && "$test" "$vm" && return
-	done
-	return 1
-}
-
-#
 # Tells whether "task up" is at work in the background.
 #
 function up_runs()

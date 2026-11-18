@@ -1,38 +1,12 @@
 #
-# Prints a service per line: its name, its URL and the task that uses it,
-# with _ for spaces.
-#
-function service_rows()
-{
-	local incus="https://127.0.0.1:$incus_port"
-	local ceph="https://127.0.0.1:$ceph_port"
-	local s3="http://127.0.0.1:$s3_port"
-
-	echo "Incus_API $incus task_dashboard_adds_the_incus_remote"
-	echo "Incus_web_UI $incus/ui/ task_dashboard_--_incus"
-	[[ -n "$with_ceph" ]] || return 0
-	echo "Ceph_dashboard $ceph task_dashboard_--_ceph"
-	echo "S3_API $s3 task_s3-credentials"
-	echo "RadosGW_admin_API $s3/admin task_s3-credentials_--_admin"
-}
-
-#
-# Prints a row of the tables that task status shows: a name, an address, up
-# or down, and a hint.
-#
-function print_row()
-{
-	printf "  %-18s %-27s %-5s %s\n" "$1" "$2" "$3" "$4"
-}
-
-#
-# Waits until the service ports answer on this computer.
+# Waits until the three service ports answer on this computer.
 #
 function wait_for_services()
 {
 	local tries=12 url
 
-	for url in $(service_rows | awk '{ print $2 }'); do
+	for url in https://127.0.0.1:26870 https://127.0.0.1:26871 \
+	           http://127.0.0.1:26872; do
 		until curl -k -s -o /dev/null --max-time 3 "$url"; do
 			(( tries-- > 0 )) || return 1
 			sleep 5
@@ -53,7 +27,14 @@ function print_services()
 	while read -r service url hint; do
 		state="down"
 		curl -k -s -o /dev/null --max-time 3 "$url" && state="up"
-		print_row "${service//_/ }" "$url" "$state" "${hint//_/ }"
-	done <<< "$(service_rows)"
+		printf "  %-18s %-27s %-5s %s\n" \
+			"${service//_/ }" "$url" "$state" "${hint//_/ }"
+	done <<EOF
+Incus_API https://127.0.0.1:26870 task_dashboard_adds_the_incus_remote
+Incus_web_UI https://127.0.0.1:26870/ui/ task_dashboard_--_incus
+Ceph_dashboard https://127.0.0.1:26871 task_dashboard_--_ceph
+S3_API http://127.0.0.1:26872 task_s3-credentials
+RadosGW_admin_API http://127.0.0.1:26872/admin task_s3-credentials_--_admin
+EOF
 	echo "  How to log in to each: docs/access.md"
 }

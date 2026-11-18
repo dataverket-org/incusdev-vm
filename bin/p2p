@@ -37,13 +37,12 @@ function add_network()
 {
 	local network="$1"
 	local feth="$2"
-	local entry="  $network:\n    mode: bridged\n    interface: $feth"
 	local networks
 
 	grep -q "^  $network:" "$lima_networks" && return
 
 	log "Adding the Lima network $network, bridged on $feth ..."
-	networks="$(awk -v add="$entry" '
+	networks="$(awk -v add="  $network:\n    mode: bridged\n    interface: $feth" '
 		{ print }
 		/^networks:/ { print add }
 	' "$lima_networks")" || return $?

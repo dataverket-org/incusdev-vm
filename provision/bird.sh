@@ -5,10 +5,8 @@
 # fe80::1 on the link. IPv4 routes travel with IPv6 next hops (RFC 8950).
 # Bird announces the Incus networks, and the addresses of routed NICs, which
 # it learns from the routes that Incus puts in the kernel for them. It
-# installs what the switch announces in the kernel, another host's networks
-# among them, but never a default route: that stays on eth0, where the Incus
-# networks are masqueraded to the internet, and only there. Run it as root,
-# after incus.sh:
+# installs what the switch announces in the kernel, but never a default
+# route: that stays on eth0. Run it as root, after incus.sh:
 #
 #   sudo provision/bird.sh
 #
@@ -36,9 +34,6 @@
 export DEBIAN_FRONTEND=noninteractive
 export HOME=/root
 
-# A Lima VM has its settings here, written from param in lima.yaml.
-[[ -r /etc/default/incusdev-vm ]] && source /etc/default/incusdev-vm
-
 iface="${BGP_IFACE:-lima0}"
 peer="${BGP_PEER:-fe80::1}"
 peer_asn="${BGP_PEER_ASN:-65000}"
@@ -50,8 +45,6 @@ routed6="${BGP_ROUTED6:-2001:db8:200::/48}"
 netplan="/etc/netplan/60-bird.yaml"
 networkd="/etc/systemd/networkd.conf.d/60-bird.conf"
 bird="/etc/bird/bird.conf"
-nat="/etc/bird/nat.nft"
-nat_unit="/etc/systemd/system/bird-nat.service"
 
 #
 # Prints a log message.
@@ -163,75 +156,13 @@ EOF
 }
 
 #
-# Masquerades the Incus networks only out the default route. Towards the
-# switch they keep their addresses, which it routes. Incus's NAT, which
-# masquerades everywhere, is turned off; bird-nat.service loads the rule at
-# boot.
-#
-function configure_nat()
-{
-	local uplink network interfaces=""
-
-	uplink="$(ip -4 route show default | awk '{ print $5; exit }')"
-	if [[ -z "$uplink" ]]; then
-		error "There is no default route."
-		return 1
-	fi
-
-	for network in $networks; do
-		interfaces+="${interfaces:+, }\"$network\""
-	done
-
-	write_file "$nat" 644 <<EOF || return $?
-# The Incus networks reach the internet through $uplink, written by
-# provision/bird.sh. Towards the switch they are routed as they are.
-table inet bird-nat
-delete table inet bird-nat
-table inet bird-nat {
-	chain postrouting {
-		type nat hook postrouting priority srcnat; policy accept;
-		iifname { $interfaces } oifname "$uplink" masquerade
-	}
-}
-EOF
-	write_file "$nat_unit" 644 <<EOF || return $?
-[Unit]
-Description=Masquerade the Incus networks to the internet only
-After=network.target
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=/usr/sbin/nft -f $nat
-
-[Install]
-WantedBy=multi-user.target
-EOF
-	if (( changed )); then
-		systemctl daemon-reload || return $?
-	fi
-	systemctl enable -q bird-nat || return $?
-	nft -f "$nat"                || return $?
-
-	for network in $networks; do
-		[[ "$(incus network get "$network" ipv4.nat)" == "false" &&
-		   "$(incus network get "$network" ipv6.nat)" == "false" ]] &&
-			continue
-
-		log "Routing $network to the switch, without NAT ..."
-		incus network set "$network" ipv4.nat=false ipv6.nat=false ||
-			return $?
-	done
-}
-
-#
-# Writes the Bird configuration and has Bird read it. The first network's
-# addresses are the router ID and the source on routes from the switch:
-# eth0 has the same address in every Lima VM, and lima0 has none.
+# Writes the Bird configuration and has Bird read it. The router ID is the
+# first network's IPv4 address: eth0 has the same address in every Lima VM,
+# the switch's among them.
 #
 function configure_bird()
 {
-	local router_id source6 prefsrc6="" network interfaces=""
+	local router_id network interfaces=""
 
 	router_id="$(ip -4 -o address show dev "${networks%% *}" 2>/dev/null |
 		awk '{ sub("/.*", "", $4); print $4; exit }')"
@@ -239,10 +170,6 @@ function configure_bird()
 		error "${networks%% *} has no IPv4 address."
 		return 1
 	fi
-
-	source6="$(ip -6 -o address show dev "${networks%% *}" scope global \
-		2>/dev/null | awk '{ sub("/.*", "", $4); print $4; exit }')"
-	[[ -n "$source6" ]] && prefsrc6="krt_prefsrc = $source6;"
 
 	for network in $networks; do
 		interfaces+="${interfaces:+, }\"$network\""
@@ -269,32 +196,20 @@ define ROUTED4 = [ $routed4+ ];
 define ROUTED6 = [ $routed6+ ];
 
 # What the switch announces goes into the kernel. From the kernel come the
-# routes that Incus adds for routed NICs, one for each address. The kernel
-# drops a route without a word when its source address goes, as while Incus
-# restarts a bridge: Bird puts it back at its next scan.
+# routes that Incus adds for routed NICs, one for each address.
 protocol kernel {
 	learn;
-	scan time 5;
 	ipv4 {
 		import where net ~ ROUTED4;
-		export filter {
-			if source != RTS_BGP then reject;
-			krt_prefsrc = $router_id;
-			accept;
-		};
+		export where source = RTS_BGP;
 	};
 }
 
 protocol kernel {
 	learn;
-	scan time 5;
 	ipv6 {
 		import where net ~ ROUTED6;
-		export filter {
-			if source != RTS_BGP then reject;
-			$prefsrc6
-			accept;
-		};
+		export where source = RTS_BGP;
 	};
 }
 
@@ -317,7 +232,7 @@ protocol bgp tor {
 EOF
 	(( ! changed )) && systemctl is-active -q bird && return
 
-	log "Configuring Bird: AS $asn, peer $peer%$iface in AS $peer_asn ..."
+	log "Configuring Bird: AS $asn, the switch $peer%$iface in AS $peer_asn ..."
 	chown root:bird "$bird" || return $?
 	systemctl enable bird   || return $?
 	systemctl restart bird  || return $?
@@ -328,7 +243,6 @@ ip link show "$iface" >/dev/null 2>&1 || exit 0
 
 install_bird      || fail "Installing Bird2 failed!"
 configure_network || fail "Configuring the network failed!"
-configure_nat     || fail "Configuring NAT failed!"
 configure_bird    || fail "Configuring Bird failed!"
 
 log "Bird is ready: AS $asn, peering with the switch on $iface."
