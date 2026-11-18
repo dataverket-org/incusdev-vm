@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # Runs the end-to-end test: provision/check.sh inside the VM, then the
-# services through the port forwards on this computer.
+# services through the port forwards on this computer. A VM made with Ceph
+# is tested with it, and fails the test without it.
 #
 # With a ToR, it also checks that the two have routes to each other: the
 # ToR pings incusbr0's addresses from the fabric's, over IPv4 and IPv6. Then
@@ -13,6 +14,7 @@
 source "${0%/*}/../share/incusdev-vm/incusdev-vm.sh" || exit $?
 
 vm=""
+ceph=""
 
 # The instance with a routed NIC: 203.0.113.254 and 2001:db8:200::254, out
 # of the way of "task routed".
@@ -138,11 +140,12 @@ function check_routed()
 
 parse_options "$@" || exit $?
 check_running      || exit $?
+vm_has_ceph && ceph="--ceph"
 
 # The script travels as an argument, since stdin is closed in the VM, and
-# --vm after it.
+# its options after it.
 # shellcheck disable=SC2086
-guest sudo bash -c "$(< "$root/provision/check.sh")" bash $vm ||
+guest sudo bash -c "$(< "$root/provision/check.sh")" bash $vm $ceph ||
 	fail "The test failed inside $name!"
 
 if vm_has_bgp; then

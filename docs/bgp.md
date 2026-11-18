@@ -14,11 +14,12 @@ your computer, and nothing asks for sudo.
 
 ## How it works
 
-The testbed has two modes, chosen when it is made:
+The testbed has two modes, chosen when it is made; `--ceph` adds Ceph to
+either, see [Ceph](usage.md#ceph):
 
 | Mode | With | What you get |
 |---|---|---|
-| default | `task up` | Incus and Ceph, no BGP |
+| default | `task up` | Incus, no BGP |
 | BGP | `task up -- --bgp` | also a simulated top-of-rack switch (ToR), and Bird2 on the Incus host peering with it |
 
 The switch is a network namespace on the Incus host, `incusdev-tor`, with a

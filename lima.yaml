@@ -1,6 +1,6 @@
-# incusdev: Debian 13 (trixie) as a testbed for Incus with virtual machines
-# and Ceph storage. Start it with "task up", not limactl directly: it picks
-# the VM type and turns nested virtualization on.
+# incusdev: Debian 13 (trixie) as a testbed for Incus with virtual machines,
+# and Ceph storage if asked for. Start it with "task up", not limactl
+# directly: it picks the VM type and turns nested virtualization on.
 
 minimumLimaVersion: "2.0.0"
 
@@ -24,10 +24,12 @@ mounts: []
 # Settings for the scripts in provision/, which Lima gives them as PARAM_*;
 # "task up" sets them when the VM is made. INCUS_CHANNEL empty is
 # provision/incus.sh's default, the LTS, and "task up -- --stable" sets it.
-# BGP is "on" with "task up -- --bgp": provision/tor.sh then gives the VM a
-# simulated top-of-rack switch, and bird.sh peers with it.
+# CEPH is "on" with "task up -- --ceph": provision/ceph.sh then installs
+# Ceph. BGP is "on" with "task up -- --bgp": provision/tor.sh then gives the
+# VM a simulated top-of-rack switch, and bird.sh peers with it.
 param:
   INCUS_CHANNEL: ""
+  CEPH: "off"
   BGP: "off"
 
 containerd:
@@ -36,8 +38,9 @@ containerd:
 
 # The scripts that also install the testbed on a Debian host. Lima copies
 # them into the VM when it is created, so a change to them needs a new VM,
-# and runs them as root on every start. tor.sh and bird.sh do nothing unless
-# the VM was made with "task up -- --bgp".
+# and runs them as root on every start. ceph.sh does nothing unless the VM
+# was made with "task up -- --ceph", tor.sh and bird.sh nothing unless it
+# was made with "task up -- --bgp".
 #
 # The boot step makes incus-admin a default group for new users, before Lima
 # creates the VM's user: a group that incus.sh adds would only count after a
@@ -72,9 +75,9 @@ provision:
 portForwards:
 - guestPort: 8443   # Incus API and web UI
   hostPort: 26870
-- guestPort: 8444   # Ceph dashboard
+- guestPort: 8444   # Ceph dashboard, with --ceph
   hostPort: 26871
-- guestPort: 8000   # S3 API, the Ceph object gateway
+- guestPort: 8000   # S3 API, the Ceph object gateway, with --ceph
   hostPort: 26872
 - guestIP: "0.0.0.0"
   guestIPMustBeZero: false

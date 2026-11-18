@@ -4,6 +4,11 @@ How to log in to each service. With the Lima VM the services are on
 `127.0.0.1` on your computer and the tasks do most of it. On a Debian host
 they are on the host's own addresses and you run the commands there.
 
+The Ceph dashboard, the S3 API and the RadosGW admin API are there only
+with Ceph: in a VM made with `task up -- --ceph`, or on a Debian host that
+ran `ceph.sh`. Without it `task dashboard -- ceph` and `task s3-credentials`
+say so.
+
 Both HTTPS services use self-signed certificates. A browser warns once per
 service; accept the certificate.
 

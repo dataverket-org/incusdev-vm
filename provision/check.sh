@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
 #
 # Tests the testbed end to end, on the machine it is installed on. Run it as
-# root, after incus.sh and ceph.sh:
+# root, after incus.sh, and after ceph.sh if Ceph is wanted:
 #
 #   sudo provision/check.sh
 #
-# It checks Ceph, the kernel mapping an RBD image, an Incus instance that
-# boots from the ceph pool and gets an address, and the three service
-# ports. The instance is a container, which needs no nested
-# virtualization; with --vm it is a virtual machine, and KVM is checked
-# first. It removes what it makes, and force-deletes any instance named
-# incusdev-check.
+# It checks that an Incus instance boots from the local pool and gets an
+# address, and the Incus API and web UI. Where Ceph is installed, or with
+# --ceph, which fails without it, the instance boots from the ceph pool in
+# place of the local one, and it also checks Ceph, the kernel mapping an RBD
+# image, and Ceph's dashboard, S3 API and RadosGW admin API. The instance is
+# a container, which needs no nested virtualization; with --vm it is a
+# virtual machine, and KVM is checked first. It removes what it makes, and
+# force-deletes any instance named incusdev-check.
 #
 #   sudo provision/check.sh --vm
 #
@@ -21,6 +23,9 @@ instance="incusdev-check"
 image="images:alpine/3.21"
 rbd_image="incus/incusdev-check"
 mode="container"
+with_ceph=""
+pool="default"
+profile="root-local"
 
 #
 # Prints a log message.
@@ -51,6 +56,7 @@ Options:
 
 	    --vm		Launches a virtual machine in place of a
 				container, which needs KVM
+	    --ceph		Fails unless Ceph is installed
 	-h, --help		Prints this message
 
 Examples:
@@ -70,6 +76,10 @@ function parse_options()
 		case "$1" in
 			--vm)
 				mode="vm"
+				shift
+				;;
+			--ceph)
+				with_ceph=1
 				shift
 				;;
 			-h|--help)
@@ -151,7 +161,7 @@ function wait_for_pool()
 }
 
 #
-# Launches the instance with its root disk on Ceph: a container, or with
+# Launches the instance with its root disk on the pool: a container, or with
 # --vm a virtual machine, without secure boot since the image is unsigned.
 #
 function launch_instance()
@@ -162,7 +172,7 @@ function launch_instance()
 		options=(--vm --config security.secureboot=false)
 	incus delete --force "$instance" </dev/null >/dev/null 2>&1
 	incus launch --quiet "$image" "$instance" "${options[@]}" \
-		--profile default --profile root-ceph </dev/null || return $?
+		--profile default --profile "$profile" </dev/null || return $?
 }
 
 #
@@ -244,8 +254,9 @@ function check_dashboard_login()
 }
 
 #
-# Checks the services on their ports, the dashboard's login, and that the
-# RadosGW admin API lets the admin user in and refuses the S3 user.
+# Checks the services on their ports. With Ceph, also the dashboard's login,
+# and that the RadosGW admin API lets the admin user in and refuses the S3
+# user.
 #
 function check_services()
 {
@@ -253,6 +264,8 @@ function check_services()
 
 	check_url https://127.0.0.1:8443/1.0 200 || return $?
 	check_url https://127.0.0.1:8443/ui/ 200 || return $?
+	[[ -n "$with_ceph" ]] || return 0
+
 	check_url https://127.0.0.1:8444/    200 || return $?
 	check_dashboard_login                    || return $?
 
@@ -265,7 +278,13 @@ parse_options "$@" || exit $?
 
 [[ $EUID -eq 0 ]] || fail "Run this as root!"
 command -v incus >/dev/null || fail "Incus is not installed: run incus.sh!"
-command -v ceph >/dev/null  || fail "Ceph is not installed: run ceph.sh!"
+if command -v ceph >/dev/null; then
+	with_ceph=1
+	pool="ceph"
+	profile="root-ceph"
+elif [[ -n "$with_ceph" ]]; then
+	fail "Ceph is not installed: run ceph.sh!"
+fi
 
 if [[ "$mode" == vm ]]; then
 	log "Checking KVM ..."
@@ -274,17 +293,21 @@ else
 	log "Checking that Incus runs containers ..."
 	check_lxc || fail "Incus has no LXC driver!"
 fi
-log "Checking Ceph ..."
-check_ceph         || fail "Ceph has errors, or does not answer client.incus!"
-log "Mapping an RBD image with the kernel ..."
-check_rbd_map      || fail "The kernel cannot map an RBD image!"
-log "Waiting for the ceph pool in Incus ..."
-wait_for_pool      || fail "Incus does not have the ceph pool!"
-log "Launching $instance, a ${mode/vm/virtual machine}, on the ceph pool ..."
+if [[ -n "$with_ceph" ]]; then
+	log "Checking Ceph ..."
+	check_ceph    || fail "Ceph has errors, or does not answer client.incus!"
+	log "Mapping an RBD image with the kernel ..."
+	check_rbd_map || fail "The kernel cannot map an RBD image!"
+	log "Waiting for the ceph pool in Incus ..."
+	wait_for_pool || fail "Incus does not have the ceph pool!"
+fi
+log "Launching $instance, a ${mode/vm/virtual machine}, on the $pool pool ..."
 launch_instance    || fail "Launching $instance failed!"
 wait_for_instance  || fail "$instance did not come up!"
-log "Checking the RBD images behind $instance ..."
-check_instance_rbd || fail "$instance does not run from RBD images!"
+if [[ -n "$with_ceph" ]]; then
+	log "Checking the RBD images behind $instance ..."
+	check_instance_rbd || fail "$instance does not run from RBD images!"
+fi
 incus delete --force "$instance" </dev/null ||
 	fail "Deleting $instance failed!"
 log "Checking the services ..."

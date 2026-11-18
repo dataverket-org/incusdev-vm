@@ -7,8 +7,8 @@ In the Lima VM, put `limactl shell incusdev` in front of the commands.
 | Question | Command |
 |---|---|
 | Does everything work end to end? | `task check`, or `sudo provision/check.sh` on a host |
-| Is Ceph healthy? | `sudo ceph -s` |
-| Is the Ceph container up? | `podman ps`, as the user that runs it |
+| With Ceph: is it healthy? | `sudo ceph -s` |
+| With Ceph: is its container up? | `podman ps`, as the user that runs it |
 | What does Incus say? | `sudo tail /var/log/incus/incusd.log` |
 | What did the install do in the VM? | `sudo grep -E '>>>\|!!!' /var/log/cloud-init-output.log` |
 | What is the VM doing? | `task status` |
@@ -128,6 +128,8 @@ its password. Every script parses under bash 3.2, which macOS has.
 
 Not tested:
 
+- A new VM since Ceph became `--ceph`: without Ceph, the default now, and
+  with `task up -- --ceph`.
 - macOS, since the ToR moved into the VM and the scripts went to bash 3.2.
   Before that the Lima VM was tested there on Apple silicon (M5, macOS 26).
 - `task check -- --vm` and `task routed -- --vm`, since the same change.

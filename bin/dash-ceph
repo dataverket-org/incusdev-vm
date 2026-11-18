@@ -14,7 +14,7 @@ case "$(uname -s)" in
 	*)	opener="xdg-open" ;;
 esac
 
-check_running || exit $?
+check_ceph || exit $?
 
 password="$(guest sudo cat /etc/ceph/dashboard.password 2>/dev/null)" ||
 	fail "No dashboard password in $name: the install did not finish!"

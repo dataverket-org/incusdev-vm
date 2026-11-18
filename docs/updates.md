@@ -33,7 +33,7 @@ For the Debian image, Incus or Ceph, build a new VM:
 ```sh
 git switch <branch>
 task destroy
-task up
+task up -- --ceph  # with Ceph, so that the test covers it too
 task status        # follow the install; it ends with the services
 task check
 ```

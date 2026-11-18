@@ -1,9 +1,11 @@
 # Architecture
 
 How the services are built, which networks they use, and how traffic flows
-between them. The diagram shows the Lima VM. On a Debian host everything
-inside the box is the same; there are no port forwards, and the three
-services are reached on the host's own addresses.
+between them. The diagram shows the Lima VM made with `task up -- --ceph`;
+without it there is no Ceph container, no pool `ceph` and no Ceph ports,
+and Incus is the one service. On a Debian host everything inside the box is
+the same; there are no port forwards, and the services are reached on the
+host's own addresses.
 
 ## Overview
 
@@ -64,8 +66,8 @@ flowchart TB
 
 | Network | Address | What is on it |
 |---|---|---|
-| Host loopback | `127.0.0.1` | The three forwarded ports. Nothing listens on other host addresses. |
-| Lima user network | VM at `192.168.5.15` | The VM's `eth0`, with outbound internet through the host. The Ceph daemons bind here. |
+| Host loopback | `127.0.0.1` | The forwarded ports: Incus's, and with Ceph two more. Nothing listens on other host addresses. |
+| Lima user network | VM at `192.168.5.15` | The VM's `eth0`, with outbound internet through the host. With Ceph, the Ceph daemons bind here. |
 | `incusbr0` | a random `10.x.x.1/24`, chosen when the bridge is created; on macOS always `10.158.42.1/24` | Incus instances. Incus runs DHCP and DNS on the bridge and does NAT out through `eth0`. |
 | The link to the ToR, with `task up -- --bgp` | IPv6 link-local only; the ToR's end has `fe80::1` | A pair of veth interfaces inside the VM: `incusdev-tor0` in the VM's own network, `server0` in the namespace `incusdev-tor`. The unnumbered BGP session between Bird2 in the VM and in the ToR, and the traffic it routes. |
 | The fabric, in the ToR's namespace | `198.51.100.1/24`, `2001:db8:100::1/64` | `fabric0`, a dummy interface that stands for the rest of the data centre. The ToR announces it. |
@@ -94,7 +96,8 @@ monitor would advertise an address that only exists inside the container.
 | 6800-6811 | `192.168.5.15` | Ceph OSD, manager and metadata server | no |
 | 53, 67 | `incusbr0` | DNS and DHCP for instances | no |
 
-The forwards are in `portForwards` in `lima.yaml`. The last rule there ignores
+The Ceph ports, 8444, 8000, 3300, 6789 and 6800-6811, are in use only with
+Ceph. The forwards are in `portForwards` in `lima.yaml`. The last rule there ignores
 every other port, so nothing else in the VM appears on the host.
 
 ## Flows
@@ -135,7 +138,7 @@ does NAT to `eth0`, and the host takes it from there to the internet.
 | Incus pool | Driver | Backed by | Profile that uses it |
 |---|---|---|---|
 | `default` | `dir` | `/var/lib/incus/storage-pools/default` | `root-local` |
-| `ceph` | `ceph` | the Ceph pool `incus`, as RBD images | `root-ceph` |
+| `ceph` | `ceph` | the Ceph pool `incus`, as RBD images; only with Ceph | `root-ceph` |
 
 The profile `default` holds the network card only. An instance takes `default`
 plus one of the two root disk profiles, so the pool is chosen per instance.
@@ -155,7 +158,7 @@ monitor answers. The end-to-end test waits for that.
 
 ```
 provision/incus.sh      installs Incus; runs on a Debian host or in the VM
-provision/ceph.sh       installs Ceph and joins it to Incus; same
+provision/ceph.sh       installs Ceph and joins it to Incus, with --ceph; same
 provision/check.sh      the end-to-end test; same
 provision/tor.sh        the simulated ToR, a namespace with Bird2; same
 provision/bird.sh       Bird2 peering with a ToR; same
