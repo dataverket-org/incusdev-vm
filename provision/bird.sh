@@ -6,15 +6,16 @@
 # Bird announces the Incus networks, and the addresses of routed NICs, which
 # it learns from the routes that Incus puts in the kernel for them. It
 # installs what the switch announces in the kernel, but never a default
-# route: that stays on eth0. Run it as root, after incus.sh:
+# route: that stays where it is. Run it as root, after incus.sh and tor.sh:
 #
 #   sudo provision/bird.sh
 #
 # Without the link it does nothing, so Lima runs it in every VM, on every
-# start, and only a VM made with "task up -- --tor" has the link. The
-# switch is provision/tor.sh. Settings, from the environment:
+# start, and only a VM made with "task up -- --bgp" has the link: tor.sh
+# makes it, with the simulated switch on its other end. For a real switch,
+# name the interface it is on. Settings, from the environment:
 #
-#   BGP_IFACE      the link to the switch, default lima0
+#   BGP_IFACE      the link to the switch, default incusdev-tor0
 #   BGP_PEER       the switch's link-local address, default fe80::1
 #   BGP_PEER_ASN   the switch's AS, default 65000
 #   BGP_ASN        this host's AS, default 65001
@@ -25,6 +26,10 @@
 #   BGP_ROUTED6    where routed NICs take IPv6 addresses, announced as
 #                  /128s, default 2001:db8:200::/48
 #
+# It takes over the host's Bird, /etc/bird/bird.conf and port 179, and
+# stops before changing anything where the host has a Bird configuration of
+# its own, or another program on that port.
+#
 # A routed NIC, with an address from each range:
 #
 #   incus config device add v1 eth0 nic nictype=routed \
@@ -34,7 +39,7 @@
 export DEBIAN_FRONTEND=noninteractive
 export HOME=/root
 
-iface="${BGP_IFACE:-lima0}"
+iface="${BGP_IFACE:-incusdev-tor0}"
 peer="${BGP_PEER:-fe80::1}"
 peer_asn="${BGP_PEER_ASN:-65000}"
 asn="${BGP_ASN:-65001}"
@@ -42,7 +47,6 @@ networks="${BGP_NETWORKS:-incusbr0}"
 routed4="${BGP_ROUTED4:-203.0.113.0/24}"
 routed6="${BGP_ROUTED6:-2001:db8:200::/48}"
 
-netplan="/etc/netplan/60-bird.yaml"
 networkd="/etc/systemd/networkd.conf.d/60-bird.conf"
 bird="/etc/bird/bird.conf"
 
@@ -121,44 +125,50 @@ function install_bird()
 }
 
 #
-# Leaves the link with its link-local address only. On Lima's link, which
-# has no DHCP server, it also turns off the DHCP that Lima asks for, which
-# the boot would wait for; another host's interface keeps its settings.
-# networkd leaves alone the routes that Bird puts in the kernel.
+# Checks that Bird and the BGP port are free for this script: a Bird
+# configuration that is neither the package's nor this script's is someone
+# else's, and so is a listener on port 179 that is not Bird.
+#
+function check_free()
+{
+	local listener
+
+	if [[ -f "$bird" ]] && ! grep -q "provision/bird.sh" "$bird" &&
+	   ! cmp -s "$bird" /usr/share/bird2/bird.conf; then
+		error "$bird is not this script's. Use the VM instead!"
+		return 1
+	fi
+
+	listener="$(ss -H -l -t -n -p "sport = :179" 2>/dev/null)"
+	if [[ -n "$listener" && "$listener" != *'"bird"'* ]]; then
+		error "Another program listens on the BGP port, 179:"
+		error "$listener"
+		return 1
+	fi
+}
+
+#
+# Has networkd leave alone the routes that Bird puts in the kernel, where
+# networkd manages the link. The link to the simulated switch it does not
+# manage, and its link-local address is all Bird uses.
 #
 function configure_network()
 {
+	networkctl list "$iface" 2>/dev/null | grep -q " unmanaged" && return
+	systemctl is-active -q systemd-networkd || return 0
+
 	write_file "$networkd" 644 <<EOF || return $?
 [Network]
 ManageForeignRoutes=no
 EOF
-	if (( changed )); then
-		systemctl restart systemd-networkd || return $?
-	fi
-
-	[[ "$iface" == lima* ]] || return 0
-
-	write_file "$netplan" 600 <<EOF || return $?
-network:
-  version: 2
-  ethernets:
-    $iface:
-      dhcp4: false
-      dhcp6: false
-      accept-ra: false
-      optional: true
-      link-local: [ipv6]
-EOF
 	(( changed )) || return 0
 
-	log "Leaving $iface with its link-local address only ..."
-	netplan apply || return $?
+	systemctl restart systemd-networkd || return $?
 }
 
 #
 # Writes the Bird configuration and has Bird read it. The router ID is the
-# first network's IPv4 address: eth0 has the same address in every Lima VM,
-# the switch's among them.
+# first network's IPv4 address: eth0 has the same address in every Lima VM.
 #
 function configure_bird()
 {
@@ -232,7 +242,7 @@ protocol bgp tor {
 EOF
 	(( ! changed )) && systemctl is-active -q bird && return
 
-	log "Configuring Bird: AS $asn, the switch $peer%$iface in AS $peer_asn ..."
+	log "Configuring Bird: AS $asn, peer $peer%$iface in AS $peer_asn ..."
 	chown root:bird "$bird" || return $?
 	systemctl enable bird   || return $?
 	systemctl restart bird  || return $?
@@ -241,6 +251,7 @@ EOF
 [[ $EUID -eq 0 ]] || fail "Run this as root!"
 ip link show "$iface" >/dev/null 2>&1 || exit 0
 
+check_free        || exit $?
 install_bird      || fail "Installing Bird2 failed!"
 configure_network || fail "Configuring the network failed!"
 configure_bird    || fail "Configuring Bird failed!"

@@ -1,19 +1,28 @@
 #!/usr/bin/env bash
 #
-# Makes this machine a simulated top-of-rack switch for incusdev: Bird2
-# takes BGP sessions on the server port, unnumbered: the port has only
-# IPv6 link-local addresses, among them the fixed fe80::1 that servers
-# connect to, and IPv4 routes travel with IPv6 next hops (RFC 8950). The
-# switch announces the "fabric", a prefix on a dummy interface that stands
-# for the rest of the data centre, and installs what servers announce in the
-# kernel. Run it as root, in the VM of tor.yaml:
+# Gives this Incus host a simulated top-of-rack switch (ToR): a network
+# namespace, joined to the host by a pair of veth interfaces, with a Bird2
+# of its own in it. The switch takes BGP sessions on its server port,
+# unnumbered: the port has only IPv6 link-local addresses, among them the
+# fixed fe80::1 that servers connect to, and IPv4 routes travel with IPv6
+# next hops (RFC 8950). It announces the "fabric", a prefix on a dummy
+# interface that stands for the rest of the data centre, and installs what
+# servers announce in its own routing table. Run it as root, before bird.sh:
 #
 #   sudo provision/tor.sh
 #
-# Safe to run again; Lima runs it on every start. Settings, from the
-# environment:
+# The commands that make the namespace and the link are the ExecStart lines
+# of incusdev-tor.service, which runs them on every boot; "systemctl cat
+# incusdev-tor" shows them. Bird runs in the namespace as
+# incusdev-tor-bird.service.
 #
-#   TOR_IFACE      the server port, default lima0
+# Safe to run again; Lima runs it on every start, and it does nothing in a
+# VM made without "task up -- --bgp": Lima says so with PARAM_BGP=off.
+# Settings, from the environment:
+#
+#   TOR_NETNS      the namespace, default incusdev-tor
+#   TOR_LINK       the host's end of the link, default incusdev-tor0
+#   TOR_IFACE      the switch's end, its server port, default server0
 #   TOR_ADDRESS    the port's fixed link-local address, default fe80::1
 #   TOR_ASN        this switch's AS, default 65000
 #   TOR_FABRIC4    the fabric's IPv4 address, default 198.51.100.1/24
@@ -21,20 +30,35 @@
 #
 # Servers may use any AS but this one.
 #
+# On a host with a network of its own, the names are the script's, and the
+# addresses are from the ranges set aside for documentation. It stops
+# before changing anything where the namespace or the link exists already
+# and is not this script's. To remove the switch again:
+#
+#   sudo systemctl disable --now incusdev-tor-bird incusdev-tor
+#   sudo rm /etc/systemd/system/incusdev-tor*.service /etc/bird/tor.conf
+#
 
 export DEBIAN_FRONTEND=noninteractive
 export HOME=/root
 
-iface="${TOR_IFACE:-lima0}"
+netns="${TOR_NETNS:-incusdev-tor}"
+link="${TOR_LINK:-incusdev-tor0}"
+iface="${TOR_IFACE:-server0}"
 address="${TOR_ADDRESS:-fe80::1}"
 asn="${TOR_ASN:-65000}"
 fabric4="${TOR_FABRIC4:-198.51.100.1/24}"
 fabric6="${TOR_FABRIC6:-2001:db8:100::1/64}"
 
-netplan="/etc/netplan/60-tor.yaml"
-networkd="/etc/systemd/networkd.conf.d/60-bird.conf"
-sysctl="/etc/sysctl.d/60-tor.conf"
-bird="/etc/bird/bird.conf"
+link_service="incusdev-tor.service"
+bird_service="incusdev-tor-bird.service"
+units="/etc/systemd/system"
+bird="/etc/bird/tor.conf"
+runtime="incusdev-tor"
+socket="/run/$runtime/bird.ctl"
+
+# Set to 1 once the namespace is made anew, and Bird must start in it again.
+restarted=0
 
 #
 # Prints a log message.
@@ -99,7 +123,27 @@ function write_file()
 }
 
 #
-# Installs Bird2.
+# Checks that the namespace and the link are free, or this script's: its
+# unit is there once it has made them.
+#
+function check_free()
+{
+	[[ -f "$units/$link_service" ]] && return
+
+	if [[ -e "/run/netns/$netns" ]]; then
+		error "A namespace $netns exists already. Set TOR_NETNS!"
+		return 1
+	fi
+
+	if [[ -e "/sys/class/net/$link" ]]; then
+		error "An interface $link exists already. Set TOR_LINK!"
+		return 1
+	fi
+}
+
+#
+# Installs Bird2. The package's own service is the host's Bird, which
+# bird.sh configures.
 #
 function install_bird()
 {
@@ -111,62 +155,57 @@ function install_bird()
 }
 
 #
-# Sets up the server port and the fabric through netplan, so that they
-# last. The port gets fe80::1 beside its own link-local address, and no
-# DHCP: Lima asks for it on every network, and the link has no server, so
-# the boot would wait for one. The switch forwards packets, and networkd
-# leaves alone the routes that Bird puts in the kernel.
+# Makes the namespace and the link, with a unit that makes them again on
+# every boot: the switch's end of the link gets fe80::1 beside its own
+# link-local address, the host's end only its own. The switch forwards
+# packets. A namespace left from before is removed first.
 #
-function configure_network()
+function configure_link()
 {
-	write_file "$networkd" 644 <<EOF || return $?
-[Network]
-ManageForeignRoutes=no
-EOF
-	if (( changed )); then
-		systemctl restart systemd-networkd || return $?
-	fi
+	write_file "$units/$link_service" 644 <<EOF || return $?
+# Written by provision/tor.sh.
+[Unit]
+Description=incusdev: the top-of-rack switch's namespace and its link
+Before=bird.service
 
-	write_file "$sysctl" 644 <<EOF || return $?
-net.ipv4.ip_forward = 1
-net.ipv6.conf.all.forwarding = 1
-EOF
-	if (( changed )); then
-		sysctl -q -p "$sysctl" || return $?
-	fi
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=-ip netns delete $netns
+ExecStart=ip netns add $netns
+ExecStart=ip link add $link type veth peer name $iface netns $netns
+ExecStart=ip -n $netns link add fabric0 type dummy
+ExecStart=ip -n $netns address add $fabric4 dev fabric0
+ExecStart=ip -n $netns address add $fabric6 dev fabric0 nodad
+ExecStart=ip -n $netns address add $address/64 dev $iface nodad
+ExecStart=ip netns exec $netns sysctl -q -w net.ipv4.ip_forward=1
+ExecStart=ip netns exec $netns sysctl -q -w net.ipv6.conf.all.forwarding=1
+ExecStart=ip -n $netns link set lo up
+ExecStart=ip -n $netns link set fabric0 up
+ExecStart=ip -n $netns link set $iface up
+ExecStart=ip link set $link up
+ExecStop=ip netns delete $netns
 
-	write_file "$netplan" 600 <<EOF || return $?
-network:
-  version: 2
-  ethernets:
-    $iface:
-      dhcp4: false
-      dhcp6: false
-      accept-ra: false
-      optional: true
-      link-local: [ipv6]
-      addresses:
-      - "$address/64"
-  dummy-devices:
-    fabric0:
-      addresses:
-      - "$fabric4"
-      - "$fabric6"
+[Install]
+WantedBy=multi-user.target
 EOF
-	if (( ! changed )) &&
-	   ip -br address show dev fabric0 2>/dev/null | grep -qF " $fabric4 "; then
-		return
-	fi
+	(( ! changed )) && systemctl is-active -q "$link_service" && return
 
-	log "Adding $address on $iface, and the fabric $fabric4 and $fabric6 ..."
-	netplan apply || return $?
+	log "Making the namespace $netns, and the link $link into it ..."
+	systemctl daemon-reload             || return $?
+	systemctl enable -q "$link_service" || return $?
+	systemctl restart "$link_service"   || return $?
+	restarted=1
 }
 
 #
-# Writes the Bird configuration and has Bird read it.
+# Writes the switch's Bird configuration, and the unit that runs a second
+# Bird with it, in the namespace and with a control socket of its own.
 #
 function configure_bird()
 {
+	local conf_changed
+
 	write_file "$bird" 640 <<EOF || return $?
 # The simulated top-of-rack switch, written by provision/tor.sh.
 
@@ -214,19 +253,42 @@ protocol bgp servers {
 	};
 }
 EOF
-	(( ! changed )) && systemctl is-active -q bird && return
-
-	log "Configuring Bird: AS $asn, servers on $iface ..."
+	conf_changed="$changed"
 	chown root:bird "$bird" || return $?
-	systemctl enable bird   || return $?
-	systemctl restart bird  || return $?
+
+	write_file "$units/$bird_service" 644 <<EOF || return $?
+# Written by provision/tor.sh.
+[Unit]
+Description=incusdev: Bird2 in the top-of-rack switch
+Requires=$link_service
+After=$link_service
+PartOf=$link_service
+
+[Service]
+NetworkNamespacePath=/run/netns/$netns
+RuntimeDirectory=$runtime
+ExecStart=/usr/sbin/bird -f -u bird -g bird -c $bird -s $socket
+ExecReload=/usr/sbin/birdc -s $socket configure
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+EOF
+	(( ! changed && ! conf_changed && ! restarted )) &&
+		systemctl is-active -q "$bird_service" && return
+
+	log "Configuring the switch's Bird: AS $asn, servers on $iface ..."
+	systemctl daemon-reload             || return $?
+	systemctl enable -q "$bird_service" || return $?
+	systemctl restart "$bird_service"   || return $?
 }
 
+[[ "${PARAM_BGP:-on}" == "on" ]] || exit 0
 [[ $EUID -eq 0 ]] || fail "Run this as root!"
-ip link show "$iface" >/dev/null 2>&1 || fail "There is no interface $iface!"
 
-install_bird      || fail "Installing Bird2 failed!"
-configure_network || fail "Configuring the network failed!"
-configure_bird    || fail "Configuring Bird failed!"
+check_free     || exit $?
+install_bird   || fail "Installing Bird2 failed!"
+configure_link || fail "Making the namespace and the link failed!"
+configure_bird || fail "Configuring the switch's Bird failed!"
 
-log "The ToR is ready: AS $asn on $address%$iface, fabric $fabric4, $fabric6."
+log "The ToR is ready: AS $asn on $address%$link, fabric $fabric4, $fabric6."
