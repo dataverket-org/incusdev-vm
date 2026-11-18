@@ -266,6 +266,7 @@ Cold builds, `make deps` and `make` with an empty cache:
 | VM | Time | Memory in use, at the most |
 |---|---|---|
 | 6 CPUs, 8 GiB | 59 s | 2.7 GiB, from 0.4 |
+| 6 CPUs, 4 GiB, with `GOTMPDIR` on the disk | 48 s | 1.6 GiB, from 0.4 |
 | 2 CPUs, 4 GiB | 73 s | 1.8 GiB, from 0.3 |
 | 2 CPUs, 2 GiB, with `GOTMPDIR` on the disk | 78 s | 1.1 GiB, from 0.3 |
 
