@@ -10,8 +10,8 @@ them in a VM on your computer.
 - Incus 7.0 LTS with its web UI, running virtual machines and containers.
 - A one-node Ceph cluster with block storage (RBD), an S3 API and a dashboard.
 - Two Incus storage pools: `default` on local disk and `ceph` on RBD.
-- On macOS, if you ask for it: a simulated top-of-rack switch, a second VM
-  with Bird2, and Bird2 in the VM, peering over an unnumbered IPv6
+- If you ask for it: a simulated top-of-rack switch, a second VM with
+  Bird2, and Bird2 in the VM, peering over an unnumbered IPv6
   link-local BGP session. Instances with a routed NIC are announced to it.
 - These services:
 
@@ -46,6 +46,15 @@ task status        # follow the install: about 6 minutes, then the services
 task check         # run the end-to-end test: 1 to 2 minutes
 ```
 
+On Arch Linux the tools come without Homebrew. Lima is in the AUR, and Arch
+names Task's binary `go-task`; a link makes it `task`:
+
+```sh
+sudo pacman -S go-task incus shellcheck qemu-base
+yay -S lima-bin
+ln -s /usr/bin/go-task ~/.local/bin/task
+```
+
 `task up` starts the work in the background. `task status` prints the install
 steps as they happen, a step that failed with `!!!`, and ends with the
 services and whether each one answers:
@@ -66,7 +75,7 @@ services and whether each one answers:
 | `task check` | Run the end-to-end test, with a container; `-- --vm` launches a virtual machine instead, which needs nested virtualization |
 | `task dashboard` | Open the Incus web UI, logged in, and the Ceph dashboard, and print its password. One of them: `-- incus` or `-- ceph` |
 | `task s3-credentials` | Print the S3 endpoint and keys; `-- admin` for the RadosGW admin user |
-| `task p2p` | Lay the link to the ToR, with sudo; again after a restart of the Mac |
+| `task p2p` | Lay the link to the ToR, with sudo; again after a restart of the computer |
 | `task tor` | Show the BGP session and the routes on both ends; `-- shell` opens a shell on the ToR |
 | `task routed` | Deploy a test instance with a routed NIC, announced to the ToR: a container, or with `--vm` a virtual machine; `-- 2`, `--delete` |
 | `task reset` | Put the VM back to how it was right after the install |
@@ -152,16 +161,16 @@ task up
 
 ## A top-of-rack switch, with BGP
 
-On macOS the VM can have a simulated top-of-rack switch (ToR): a second,
-small VM, `incusdev-tor`, running Bird2. It is joined to `incusdev` by a
-point-to-point link of its own, a pair of `feth` interfaces, and Bird2 in
-`incusdev` holds a BGP session with it across that link. Instances with a
-routed NIC are announced to the switch, over IPv4 and IPv6.
+The VM can have a simulated top-of-rack switch (ToR): a second, small VM,
+`incusdev-tor`, running Bird2. It is joined to `incusdev` by a link of its
+own, and Bird2 in `incusdev` holds a BGP session with it across that link.
+On macOS the link is a pair of `feth` interfaces; on Linux it is a bridge
+without addresses, `incusdev-p2p`. Instances with a routed NIC are announced to the switch, over IPv4 and IPv6.
 
 ```
 incusdev, AS 65001                          incusdev-tor, AS 65000
   Bird2: incusbr0, routed NICs                Bird2: the fabric
-  lima0: link-local only   ── feth4 ⇄ feth5 ──  lima0: fe80::1
+  lima0: link-local only   ── the link ──────  lima0: fe80::1
   BGP to fe80::1%lima0                         fabric0: 198.51.100.1/24
                                                         2001:db8:100::1/64
 ```
@@ -184,15 +193,21 @@ real network.
 
 ### Create it
 
-The ToR is chosen when the VM is created. The link needs root once, for the
-`feth` pair, two Lima networks bridged on its ends, and the sudoers file that
-lets Lima start them. `task p2p` does that and asks for sudo; run it in your
-own terminal. The `feth` pair is gone after a restart of the Mac, and
-`task up` asks for `task p2p` again then.
+The ToR is chosen when the VM is created. The link needs root once, and
+`task p2p` lays it and asks for sudo; run it in your own terminal:
+
+| | macOS | Linux |
+|---|---|---|
+| The link | a pair of `feth` interfaces, `feth4` ⇄ `feth5` | a bridge, `incusdev-p2p`: no addresses, no IPv6 on the host's side, and no firewall hook sees its frames |
+| Lima networks, in `~/.lima/_config/networks.yaml` | `incusdev-p2p` and `incusdev-p2p-tor`, bridged on the two ends | `incusdev-p2p`, bridged on the bridge, for both VMs |
+| Lima's helper, allowed in `/etc/sudoers.d/lima` | socket_vmnet | `lima-privileged-net`, which adds a tap per VM to the bridge |
+
+The `feth` pair and the bridge are gone after a restart of the computer, and
+`task up` asks for `task p2p` again then. On Linux, the sudoers file needs
+your user in the group that `networks.yaml` names, `wheel` on Arch.
 
 ```sh
-task p2p            # the link: feth4 ⇄ feth5, the networks incusdev-p2p
-                    # and incusdev-p2p-tor in ~/.lima/_config/networks.yaml
+task p2p            # the link, the Lima networks, the sudoers file
 task up -- --tor    # the ToR first, then incusdev, about 8 minutes
 task status         # the services, and the BGP session
 task tor            # the session, and the routes on both ends

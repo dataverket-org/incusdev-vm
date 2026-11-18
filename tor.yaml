@@ -1,8 +1,8 @@
 # incusdev-tor: a top-of-rack switch for incusdev, simulated by Bird2 on
 # Debian 13. "task up" starts it beside incusdev; do not start it with
-# limactl directly. The two meet on a point-to-point link, a feth pair that
-# "task p2p" lays, and hold an unnumbered eBGP session across it: see
-# provision/tor.sh and provision/bird.sh.
+# limactl directly. The two meet on a link that "task p2p" lays, a feth
+# pair on macOS and a bridge on Linux, and hold an unnumbered eBGP session
+# across it: see provision/tor.sh and provision/bird.sh.
 
 minimumLimaVersion: "2.0.0"
 
@@ -25,7 +25,8 @@ containerd:
   user: false
 
 # The link to incusdev is no network of its own here: "task up" adds it with
-# --network, since it exists only on macOS. It appears in the VM as lima0.
+# --network, since it differs between macOS and Linux. It appears in the VM
+# as lima0.
 
 provision:
 - mode: system

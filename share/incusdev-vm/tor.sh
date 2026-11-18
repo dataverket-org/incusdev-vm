@@ -1,9 +1,13 @@
 #
-# Tells whether this computer can have a ToR: only macOS has feth interfaces.
+# Tells whether this computer can have a ToR: macOS links the VMs with feth,
+# Linux with a bridge.
 #
 function has_tor()
 {
-	[[ "$(uname -s)" == "Darwin" ]]
+	case "$(uname -s)" in
+		Darwin|Linux)	return 0 ;;
+		*)		return 1 ;;
+	esac
 }
 
 #
@@ -17,13 +21,67 @@ function feth_ready()
 }
 
 #
-# Tells whether Lima knows both networks and may start them with sudo.
+# Tells whether the bridge exists and is up.
+#
+function bridge_ready()
+{
+	[[ -d "/sys/class/net/$p2p_bridge/bridge" ]] &&
+	ip link show "$p2p_bridge" 2>/dev/null | grep -q "[<,]UP[,>]"
+}
+
+#
+# Tells whether this platform's link exists: the feth pair or the bridge.
+#
+function link_ready()
+{
+	case "$(uname -s)" in
+		Darwin)	feth_ready ;;
+		Linux)	bridge_ready ;;
+		*)	return 1 ;;
+	esac
+}
+
+#
+# Prints the command that starts the link's network on Linux, as the
+# sudoers file that Lima makes now allows it.
+#
+function bridge_start_command()
+{
+	limactl sudoers 2>/dev/null |
+		awk -v bridge="--bridge=$p2p_bridge," '
+			$3 == "start" && $6 == bridge {
+				sub(/,$/, "", $6)
+				print $2, $3, $4, $5, $6
+			}'
+}
+
+#
+# Tells whether Lima may start the networks with sudo. On Linux the sudoers
+# file is for root to read; sudo tells whether it allows the link's network,
+# with the helper's current hash.
+#
+function sudoers_ready()
+{
+	local words
+
+	if [[ "$(uname -s)" != "Linux" ]]; then
+		limactl sudoers --check >/dev/null 2>&1
+		return
+	fi
+
+	read -r -a words <<< "$(bridge_start_command)"
+	(( ${#words[@]} > 0 )) || return 1
+	sudo -n -l "${words[@]}" >/dev/null 2>&1
+}
+
+#
+# Tells whether Lima knows the networks and may start them with sudo.
 #
 function networks_ready()
 {
 	grep -q "^  $p2p_network:" "$lima_networks" 2>/dev/null &&
 	grep -q "^  $p2p_network_tor:" "$lima_networks" 2>/dev/null &&
-	limactl sudoers --check >/dev/null 2>&1
+	sudoers_ready
 }
 
 #
@@ -31,9 +89,9 @@ function networks_ready()
 #
 function check_p2p()
 {
-	feth_ready && networks_ready && return
+	link_ready && networks_ready && return
 
-	error "The link to the ToR is not there; a restart of the Mac removes it."
+	error "The link to the ToR is not there; a restart of the computer removes it."
 	error "Lay it with: task p2p"
 	return 1
 }

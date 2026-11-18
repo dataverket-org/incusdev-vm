@@ -13,7 +13,7 @@
 # With INCUS_SRC set, a new VM gets that directory mounted, writable and at
 # the same path.
 #
-# With --tor, on macOS, a new VM gets a simulated top-of-rack switch: a
+# With --tor, a new VM gets a simulated top-of-rack switch: a
 # second VM, incusdev-tor, with Bird2, on a point-to-point link to incusdev,
 # which runs Bird2 too. "task p2p" lays the link first. Later starts, and
 # "task reset", keep the switch; "task destroy" removes it:
@@ -37,6 +37,19 @@ function platform_options()
 }
 
 #
+# Prints the limactl options of the ToR's VM for this platform: Bird needs
+# no nested virtualization.
+#
+function tor_platform_options()
+{
+	case "$(uname -s)" in
+		Darwin)	echo "--vm-type=vz" ;;
+		Linux)	echo "--vm-type=qemu" ;;
+		*)	return 1 ;;
+	esac
+}
+
+#
 # Creates or starts the ToR's VM and waits for it.
 #
 function start_tor()
@@ -50,8 +63,10 @@ function start_tor()
 	fi
 
 	log "Creating $tor, the ToR ..."
-	limactl start --tty=false --timeout 10m --name "$tor" --vm-type=vz \
-		--network "lima:$p2p_network_tor" "$root/tor.yaml" || return $?
+	# shellcheck disable=SC2046
+	limactl start --tty=false --timeout 10m --name "$tor" \
+		$(tor_platform_options) --network "lima:$p2p_network_tor" \
+		"$root/tor.yaml" || return $?
 }
 
 #
@@ -112,7 +127,7 @@ fi
 command -v limactl >/dev/null || fail "limactl not found. Run: brew bundle"
 
 if [[ -n "$with_tor" ]]; then
-	has_tor || fail "The ToR needs macOS: Lima links the two VMs with feth."
+	has_tor || fail "The ToR needs macOS or Linux."
 	vm_exists && ! vm_exists "$tor" &&
 		fail "$name has no ToR. Run 'task destroy' and 'task up -- --tor'!"
 fi

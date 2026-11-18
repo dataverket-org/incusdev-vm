@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 #
-# Lays the point-to-point link between incusdev and its ToR, on macOS: a
-# pair of feth interfaces joined end to end, a Lima network bridged on each
-# end, and the sudoers file that lets Lima start them. It asks for sudo.
+# Lays the link between incusdev and its ToR, and the sudoers file that lets
+# Lima start its networks. It asks for sudo.
 #
-# The networks and the sudoers file stay. The feth pair does not survive a
-# restart of the Mac, and "task up" asks for this again after one.
+#   macOS: a pair of feth interfaces joined end to end, a Lima network
+#          bridged on each end.
+#   Linux: a bridge without addresses, one Lima network bridged on it.
+#
+# The networks and the sudoers file stay. The feth pair and the bridge do
+# not survive a restart, and "task up" asks for this again after one.
 #
 
 source "${0%/*}/../share/incusdev-vm/incusdev-vm.sh" || exit $?
@@ -30,19 +33,58 @@ function lay_feth()
 }
 
 #
-# Adds a network bridged on a feth end to Lima's networks.yaml, under
-# "networks:", unless it is there.
+# Creates the bridge and brings it up. The host takes no part in the link:
+# no IPv6 on it, and no firewall hook sees its frames. Multicast is flooded,
+# for the neighbour discovery of the unnumbered BGP session.
+#
+function lay_bridge()
+{
+	bridge_ready && return
+
+	if [[ ! -d "/sys/class/net/$p2p_bridge" ]]; then
+		log "Creating the bridge $p2p_bridge ..."
+		sudo ip link add "$p2p_bridge" type bridge mcast_snooping 0 \
+			nf_call_iptables 0 nf_call_ip6tables 0 \
+			nf_call_arptables 0 || return $?
+	fi
+	sudo sysctl -q -w "net.ipv6.conf.$p2p_bridge.disable_ipv6=1" ||
+		return $?
+	sudo ip link set "$p2p_bridge" up || return $?
+}
+
+#
+# Lays the link of this platform, and its Lima networks.
+#
+function lay_link()
+{
+	case "$(uname -s)" in
+		Darwin)
+			lay_feth || return $?
+			add_network "$p2p_network" "$p2p_feth" || return $?
+			add_network "$p2p_network_tor" "$p2p_feth_tor" ||
+				return $?
+			;;
+		Linux)
+			lay_bridge || return $?
+			add_network "$p2p_network" "$p2p_bridge" || return $?
+			;;
+	esac
+}
+
+#
+# Adds a network bridged on an interface, a feth end or the bridge, to
+# Lima's networks.yaml, under "networks:", unless it is there.
 #
 function add_network()
 {
 	local network="$1"
-	local feth="$2"
+	local iface="$2"
 	local networks
 
 	grep -q "^  $network:" "$lima_networks" && return
 
-	log "Adding the Lima network $network, bridged on $feth ..."
-	networks="$(awk -v add="  $network:\n    mode: bridged\n    interface: $feth" '
+	log "Adding the Lima network $network, bridged on $iface ..."
+	networks="$(awk -v add="  $network:\n    mode: bridged\n    interface: $iface" '
 		{ print }
 		/^networks:/ { print add }
 	' "$lima_networks")" || return $?
@@ -56,25 +98,24 @@ function update_sudoers()
 {
 	local sudoers
 
-	limactl sudoers --check >/dev/null 2>&1 && return
+	sudoers_ready && return
 
 	sudoers="$(limactl sudoers)" || return $?
 	log "Updating /etc/sudoers.d/lima for the new networks ..."
 	echo "$sudoers" | sudo tee /etc/sudoers.d/lima >/dev/null || return $?
 }
 
-has_tor || fail "The ToR and its link need macOS."
+has_tor || fail "The ToR and its link need macOS or Linux."
 command -v limactl >/dev/null || fail "limactl not found. Run: brew bundle"
 
 # networks.yaml is made the first time Lima runs.
 [[ -f "$lima_networks" ]] || limactl list >/dev/null 2>&1
 [[ -f "$lima_networks" ]] || fail "$lima_networks is missing!"
 
-lay_feth       || fail "Creating the feth pair failed!"
-add_network "$p2p_network" "$p2p_feth" ||
-	fail "Adding $p2p_network failed!"
-add_network "$p2p_network_tor" "$p2p_feth_tor" ||
-	fail "Adding $p2p_network_tor failed!"
+lay_link       || fail "Laying the link failed!"
 update_sudoers || fail "Updating the sudoers file failed!"
 
-log "The link is laid: $name on $p2p_feth, $tor on $p2p_feth_tor."
+case "$(uname -s)" in
+	Darwin)	log "The link is laid: $name on $p2p_feth, $tor on $p2p_feth_tor." ;;
+	Linux)	log "The link is laid: $name and $tor on the bridge $p2p_bridge." ;;
+esac

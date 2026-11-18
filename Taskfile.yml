@@ -38,7 +38,7 @@ tasks:
       - bin/s3-credentials {{.CLI_ARGS}}
 
   p2p:
-    desc: "Lay the link to the ToR; again after a Mac restart"
+    desc: "Lay the link to the ToR; again after a restart"
     silent: true
     cmds:
       - bin/p2p
