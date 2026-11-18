@@ -128,11 +128,6 @@ its password. Every script parses under bash 3.2, which macOS has.
 
 Not tested:
 
-- A new VM since Ceph became `--ceph`: without Ceph, the default now, and
-  with `task up -- --ceph`.
-- macOS, since the ToR moved into the VM and the scripts went to bash 3.2.
-  Before that the Lima VM was tested there on Apple silicon (M5, macOS 26).
-- `task check -- --vm` and `task routed -- --vm`, since the same change.
 - `task dashboard` on macOS, and on Linux since it prints the dashboard's
   password.
 - arm64 on Linux.
