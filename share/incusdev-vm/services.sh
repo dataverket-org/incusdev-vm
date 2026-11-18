@@ -1,4 +1,13 @@
 #
+# Prints a row of the tables that "task status" shows: a name, an address,
+# up or down, and a hint.
+#
+function print_row()
+{
+	printf "  %-18s %-27s %-5s %s\n" "$1" "$2" "$3" "$4"
+}
+
+#
 # Waits until the three service ports answer on this computer.
 #
 function wait_for_services()
@@ -27,8 +36,7 @@ function print_services()
 	while read -r service url hint; do
 		state="down"
 		curl -k -s -o /dev/null --max-time 3 "$url" && state="up"
-		printf "  %-18s %-27s %-5s %s\n" \
-			"${service//_/ }" "$url" "$state" "${hint//_/ }"
+		print_row "${service//_/ }" "$url" "$state" "${hint//_/ }"
 	done <<EOF
 Incus_API https://127.0.0.1:26870 task_dashboard_adds_the_incus_remote
 Incus_web_UI https://127.0.0.1:26870/ui/ task_dashboard_--_incus

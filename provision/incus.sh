@@ -139,8 +139,8 @@ function configure_network()
 	if ! incus network show incusbr0 >/dev/null 2>&1; then
 		log "Creating the network incusbr0 ..."
 		incus network create incusbr0 2>/dev/null ||
-			incus network create incusbr0 \
-				ipv4.address="$subnet" ipv4.nat=true || return $?
+			incus network create incusbr0 ipv4.address="$subnet" \
+				ipv4.nat=true || return $?
 	fi
 
 	incus profile device get default eth0 type >/dev/null 2>&1 && return

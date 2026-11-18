@@ -1,16 +1,3 @@
-# macOS's /bin/bash is 3.2, and a PATH without Homebrew first finds it.
-if (( BASH_VERSINFO[0] * 100 + BASH_VERSINFO[1] < 502 )); then
-	for bash in ${HOMEBREW_PREFIX:+"$HOMEBREW_PREFIX/bin/bash"} \
-	            /opt/homebrew/bin/bash /usr/local/bin/bash \
-	            /home/linuxbrew/.linuxbrew/bin/bash; do
-		[[ -f "$0" && -x "$bash" ]] || continue
-		"$bash" -c '(( BASH_VERSINFO[0] * 100 + BASH_VERSINFO[1] >= 502 ))' &&
-			exec "$bash" "$0" "$@"
-	done
-	echo "${0##*/}: needs bash 5.2 or newer; brew bundle installs bash 5" >&2
-	exit 1
-fi
-
 name="incusdev"
 share="${BASH_SOURCE[0]%/*}"
 root="$share/../.."

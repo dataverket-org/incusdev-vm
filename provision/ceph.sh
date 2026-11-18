@@ -220,8 +220,9 @@ function configure_ceph_client()
 
 	if ! ceph -s >/dev/null 2>&1; then
 		log "Making the Ceph admin key anew, with the type aes ..."
-		until ( umask 077 && in_container ceph auth rotate client.admin \
-			--key_type aes > "$keyring" 2>/dev/null ); do
+		until ( umask 077 &&
+		        in_container ceph auth rotate client.admin \
+		        --key_type aes > "$keyring" 2>/dev/null ); do
 			(( tries-- > 0 )) || return 1
 			sleep 5
 		done
