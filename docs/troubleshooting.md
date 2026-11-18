@@ -12,6 +12,8 @@ In the Lima VM, put `limactl shell incusdev` in front of the commands.
 | What does Incus say? | `sudo tail /var/log/incus/incusd.log` |
 | What did the install do in the VM? | `sudo grep -E '>>>\|!!!' /var/log/cloud-init-output.log` |
 | What is the VM doing? | `task status` |
+| With `--source`: why did the build fail? | `cat /opt/incusdev/build.log` |
+| With `--source`: which incusd runs? | `task status`, or `systemctl cat incus` for the drop-in |
 | Why did Lima not start? | `incusdev-up.log` in `$TMPDIR`, or in `/tmp` where that is not set, and `~/.lima/incusdev/ha.stderr.log` |
 
 ## Known behaviour
@@ -52,6 +54,22 @@ find nothing to change. `task up` only begins the start and returns;
 starting.
 
 ## Why it is built this way
+
+**A build of Incus on top of the package.** With `--source` the VM keeps
+Zabbly's package, on the `daily` channel, for QEMU, the firmware, lxcfs,
+the agents, the web UI and the LXC hooks, and a systemd drop-in starts the
+build's `incusd` in its place. The drop-in and the wrappers it starts are
+made from the package's own, with `/opt/incusdev` in front of `/opt/incus`,
+so they follow the package. The build links Debian's liblxc, but runs with
+Zabbly's, which goes with the package's LXC hooks; the soname is the same.
+Removing the drop-in brings the package back, and `apt` never overwrites the
+build. Incus from source alone would need Debian's older QEMU, and would be
+a second way to install the testbed.
+
+**Delve as root, on the VM's loopback.** `task debug` runs Delve as root,
+since it attaches to `incusd`, and Delve takes clients of its own user
+only. Lima's port forward reaches it as root. It listens on `127.0.0.1` in
+the VM, so only the forward and root in the VM reach it.
 
 **The same scripts for a host and for the VM.** `lima.yaml` names
 `provision/incus.sh` and `provision/ceph.sh` under `provision`. Nothing else
@@ -133,6 +151,12 @@ Not tested:
 - arm64 on Linux.
 - Homebrew's Lima and QEMU on Linux, and the Arch packages of
   [docs/install.md](install.md).
+- `--source`, `task build`, `task debug` and `task incus -- --client` on
+  Linux; they were tested on macOS on Apple silicon.
+- VS Code and GoLand themselves. Through `127.0.0.1:26873`, Delve's own
+  client and a client of the Debug Adapter Protocol, attaching as VS Code
+  does with `mode: remote`, both hit a breakpoint.
+- `provision/incus-source.sh` run by hand on a Debian 13 machine.
 - The scripts run by hand on a plain Debian 13 machine, since they changed
   to keys of the type `aes`. `tor.sh` and `bird.sh` alone are: on a plain
   Debian 13 virtual machine, with a stand-in for `incusbr0`.

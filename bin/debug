@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+#
+# Attaches Delve to the running incusd, in a VM made with "task up --
+# --source", for a debugger on this computer: Delve listens in the VM on
+# 127.0.0.1:2345, which Lima forwards to 127.0.0.1:26873 here. incusd goes
+# on serving until the debugger stops it. --stop detaches Delve, and incusd
+# runs on.
+#
+
+source "${0%/*}/../share/incusdev-vm/incusdev-vm.sh" || exit $?
+
+stop=""
+
+# The transient unit that Delve runs in, in the VM.
+unit="incusdev-dlv"
+
+#
+# Prints usage information for task debug.
+#
+function usage()
+{
+	cat <<USAGE
+usage: task debug [-- OPTIONS]
+
+Options:
+
+	    --stop		Detaches Delve; incusd runs on
+	-h, --help		Prints this message
+
+Examples:
+
+	$ task build -- --debug
+	$ task debug
+	$ task debug -- --stop
+
+USAGE
+}
+
+#
+# Parses command-line options for task debug.
+#
+function parse_options()
+{
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+			--stop)
+				stop=1
+				shift
+				;;
+			-h|--help)
+				usage
+				exit
+				;;
+			*)
+				echo "debug: unrecognized option $1" >&2
+				return 1
+				;;
+		esac
+	done
+}
+
+#
+# Waits until Delve listens in the VM.
+#
+function wait_for_delve()
+{
+	local tries=20
+
+	until guest ss -Hltn "sport = :2345" | grep -q .; do
+		guest systemctl is-active -q "$unit" || return 1
+		(( tries-- > 0 )) || return 1
+		sleep 1
+	done
+}
+
+parse_options "$@" || exit $?
+check_source       || exit $?
+
+guest sudo systemctl stop "$unit" >/dev/null 2>&1
+if [[ -n "$stop" ]]; then
+	log "Delve is detached; incusd runs on."
+	exit
+fi
+
+pid="$(guest systemctl show -p MainPID --value incus)"
+[[ -n "$pid" && "$pid" != 0 ]] || fail "incusd does not run in $name!"
+
+if ! guest grep -q '^debug=1' /opt/incusdev/build-info; then
+	warn "incusd is an optimized build: stepping and variables are"
+	warn "unreliable. For a build without optimizations: task build -- --debug"
+fi
+
+# Delve takes clients of its own user only: as root, the connections that
+# Lima forwards from this computer.
+guest sudo systemd-run --quiet --collect --unit "$unit" \
+	/opt/incusdev/bin/dlv attach "$pid" --headless --accept-multiclient \
+	--continue --api-version 2 --listen 127.0.0.1:2345 ||
+	fail "Starting Delve failed!"
+wait_for_delve || fail "Delve did not start! See: journalctl -u $unit"
+
+log "Delve is attached to incusd, process $pid, and listens on"
+log "127.0.0.1:26873. Attach your debugger: docs/incus-development.md"
+log "task debug -- --stop detaches it."

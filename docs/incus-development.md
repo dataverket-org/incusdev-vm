@@ -1,67 +1,209 @@
 # Work on Incus itself
 
-The VM is also a place to build and test Incus from source, the way the
-[Incus documentation][from-source] describes, with its Ceph cluster for the
-storage tests if you make it with `--ceph`. You edit on your computer and
-build in the VM: set `INCUS_SRC` to your checkout before you create the VM,
-and `task up` mounts it into the VM, writable and at the same path.
+The VM runs Incus from its `main` branch, or from your own changes, so that
+you test them against everything the testbed has: virtual machines, Ceph,
+BGP and `task check`. Three ways in, from the least work to the most:
+
+| Way | With | The VM's incusd is |
+|---|---|---|
+| The daily build | `task up -- --daily` | Zabbly's `daily` package, built from `main` every night |
+| A clone | `task up -- --source [REF]` | built in the VM from a clone of `INCUS_GIT`, upstream's unless you say, at `REF`, `main` unless you say |
+| Your checkout | `INCUS_SRC=DIR task up -- --source` | built in the VM from `DIR` on your computer, mounted |
+
+The other options go with all three: `--ceph`, `--bgp`, a channel and a
+size. The building follows upstream's
+[Install Incus from source][from-source].
 
 ```sh
-export INCUS_SRC=~/kode/incus         # in your shell profile
-task up -- --ceph --cpus 4 --memory 6
-cd ~/kode/incus && limactl shell incusdev
+task up -- --source --ceph                     # main, with Ceph
+task up -- --source refs/pull/1234/head        # a pull request
+INCUS_GIT=https://github.com/you/incus task up -- --source my-branch
+INCUS_SRC=~/src/incus task up -- --source      # your checkout
 ```
 
-## Why build in the VM
+## The daily build
 
-`incusd` links liblxc, cowsql and raft from the Linux system it is built
-on: macOS cannot build it, and a build from another Linux does not match
-the VM's libraries. A rebuild in the VM takes seconds. The mount is
-writable because the test suite writes into the source tree.
+`--daily` is the `daily` channel of [Zabbly's packages][zabbly], untested
+builds of `main` from every night. It needs no build and updates with
+`apt`, as the other channels do. It is the quickest way to try what `main`
+has; for a change of your own, build it.
 
-## Set up the VM, once
+## How a build runs
 
-In the VM, once: Incus's build and test dependencies for Debian, and
-`xfsprogs`. Mask Debian's LXC services, as the Incus CI does; they add a
-bridge of their own.
+`task up -- --source` makes a VM of 6 CPUs and 8 GiB, unless you give a
+size, on the `daily` channel, unless you give one. While the VM is made,
+`provision/incus-source.sh`:
 
-```sh
-sudo apt install acl attr autoconf automake dnsmasq-base git golang-go \
-	libacl1-dev libcap-dev liblxc1 lxc-dev libsqlite3-dev libtool \
-	libudev-dev liblz4-dev libuv1-dev make pkg-config rsync tar tcl \
-	squashfs-tools xz-utils nftables busybox-static curl gettext jq \
-	sqlite3 socat bind9-dnsutils xfsprogs
-sudo systemctl mask --now lxc.service lxc-net.service
-echo 'export GOTOOLCHAIN=auto' >> ~/.bashrc     # Debian's Go is too old
-make deps | grep '^export ' >> ~/.bashrc && . ~/.bashrc
+1. installs upstream's Debian packages for the build, the test suite's,
+   and `ceph-common`;
+2. takes Debian's Go with `GOTOOLCHAIN=auto`, which fetches the Go that
+   `go.mod` asks for;
+3. clones `INCUS_GIT` at `REF` into `~/incus`, or takes the mounted
+   checkout as it is;
+4. runs `make deps`, for raft and cowsql, and `make`, as your user in the
+   VM;
+5. installs Delve, for `task debug`;
+6. copies the build to `/opt/incusdev`, and starts it in place of the
+   package's `incusd`.
+
+The package stays for everything but `incusd`: QEMU, the firmware, lxcfs,
+the agents for other systems, the web UI and the LXC hooks. Two systemd
+drop-ins, `incusdev-source.conf` for `incus.service` and
+`incus-startup.service`, start the build with the package's own wrappers,
+which get `/opt/incusdev` in front of `/opt/incus`. In the VM, `incus` is
+the build's client too.
+
+A new VM with `--source`, `--ceph` and `--bgp` is ready in about 6
+minutes, the build included. A first build, with `make deps`, takes about a
+minute on 6 CPUs, and about 2.3 GiB of memory. The default size is
+generous: on 2 CPUs a first build takes 73 s with 4 GiB and 78 s with
+2 GiB, where it needs about 1.1 GiB. Go's temporary files go to the disk,
+since `/tmp` is a tmpfs of half the memory. A rebuild only compiles what
+changed:
+
+| `task build` after | Takes, with the restart |
+|---|---|
+| no change | 7 s |
+| an edit in `cmd/incusd` | 12 s |
+| a new API extension in `internal/version` | 14 s |
+| `-- --debug`, from an optimized build | 24 s |
+
+`task status` says which `incusd` runs:
+
+```
+>>> Incus in the VM:
+  incusd             7.6, from source                  v7.6.0-330-g8101d95ef8
 ```
 
-## Build and test
-
-Build, and run a test against the Ceph cluster, in a VM made with
-`--ceph`. `main.sh` takes the
-name of a test in `test/suites`; without one it runs all of them. Its
-daemons run beside the VM's own Incus and keep their state on a tmpfs. They
-find no QEMU, so they cannot run virtual machines.
+## The loop: edit, build, test
 
 ```sh
-make
+task build                       # make, and restart incusd from it
+task build -- refs/pull/1234/head    # a clone: check out a ref first
+task check                       # the end-to-end test, on the build
+```
+
+`task build` builds what the VM builds from: your checkout as it is, with
+your edits, or the clone. It restarts `incusd`, and running instances stay
+up. A build that fails leaves the running one in place and prints the end
+of the log, which is in `/opt/incusdev/build.log` in the VM.
+
+`task build -- --package` goes back to the package's `incusd`, and
+`task build` comes back to the build. A restart of the VM keeps the
+choice.
+
+## Downgrades
+
+A newer `incusd` may update the database schema when it starts; upstream
+[warns][upgrade] that an older one may then find the database invalid, and
+that going back needs the backup it kept in `/var/lib/incus/database`.
+`task build -- --package`, and a build of an older ref, can be such a
+downgrade. `task build -- --package` tries the package's `incusd`, and goes
+back to the build when it does not start. `task reset` is the way back in
+any case: the copy it starts from was saved after the first build.
+
+## A debugger
+
+`task build -- --debug` builds without optimizations, with upstream's
+`make debug`, so that Delve can step through every line and see every
+variable. `task debug` attaches Delve to the running `incusd`, in the VM,
+and Lima forwards it to `127.0.0.1:26873` on your computer. `incusd` goes
+on serving until the debugger stops it; `task debug -- --stop` detaches,
+and so does a `task build`.
+
+```sh
+task build -- --debug
+task debug
+```
+
+Then attach from your editor. The source path in the build is the one in
+the VM: your checkout's own path with `INCUS_SRC`, which is mounted at the
+same path, so no mapping is needed. For a clone, map `~/incus` in the VM,
+`$(limactl shell incusdev sh -c 'echo $HOME')/incus`, to a checkout of the
+same commit on your computer.
+
+VS Code, in `.vscode/launch.json` of the checkout:
+
+```json
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "incusd in incusdev",
+      "type": "go",
+      "request": "attach",
+      "mode": "remote",
+      "host": "127.0.0.1",
+      "port": 26873
+    }
+  ]
+}
+```
+
+GoLand: Run, Edit Configurations, Go Remote, host `127.0.0.1`, port
+`26873`.
+
+Leave a debugging session by disconnecting, and do not let the editor kill
+the process it is attached to: that is `incusd`, which systemd then starts
+again, without Delve.
+
+## The client on your computer
+
+`task incus` adds the remote `incusdev` to the `incus` client on your
+computer; see [Access](access.md). Homebrew's client may be older than the
+build. `task incus -- --client` builds the client from the VM's source for
+your computer, in the VM, so no Go is needed here, and puts it in
+`~/.local/bin/incus-dev`, beside the `incus` you have:
+
+```sh
+task incus -- --client
+incus-dev list incusdev:
+```
+
+## The test suite
+
+The VM has upstream's test suite's packages. Its daemons run beside the
+VM's own `incusd` and keep their state on a tmpfs; they find no QEMU, so
+they run no virtual machines. In the VM, in the source, with the
+environment of the build:
+
+```sh
+limactl shell incusdev
+cd ~/incus          # or your checkout's path
+export GOTOOLCHAIN=auto
+export LD_LIBRARY_PATH="$HOME/go/deps/raft/.libs/:$HOME/go/deps/cowsql/.libs/"
 cd test && sudo -E env "PATH=$PATH:$HOME/go/bin" "GOPATH=$HOME/go" \
 	"LD_LIBRARY_PATH=$LD_LIBRARY_PATH" INCUS_BACKEND=ceph \
 	INCUS_CEPH_CLUSTER=ceph INCUS_TMPFS=1 ./main.sh storage_driver_ceph
 ```
 
+`main.sh` takes the name of a test in `test/suites`; without one it runs
+all of them. `INCUS_BACKEND=ceph` needs a VM made with `--ceph`;
+[the suite's README][test-readme] lists its other settings.
+
+## Why build in the VM
+
+`incusd` links liblxc, cowsql and raft from the Linux system it is built
+on: macOS cannot build it, and a build from another Linux does not match
+the VM's libraries. The mount is writable because the test suite writes
+into the source tree.
+
 ## An existing VM
 
-`task reset` keeps the mount, and drops what was installed in the VM.
-For a VM made before `INCUS_SRC` was set, add the mount and the memory to it
-and to the copy that `task reset` starts from:
+`--source` is chosen when the VM is made; for a VM made without it, run
+`task destroy` and `task up -- --source`. `task reset` keeps the mount, and
+goes back to the first build. For a VM made before `INCUS_SRC` was set,
+without `--source`, add the mount for the test suite to it and to the copy
+that `task reset` starts from:
 
 ```sh
 task down
-limactl edit --tty=false incusdev --memory 6 --mount "$INCUS_SRC:w"
-limactl edit --tty=false incusdev-base --memory 6 --mount "$INCUS_SRC:w"
+limactl edit --tty=false incusdev --mount "$INCUS_SRC:w"
+limactl edit --tty=false incusdev-base --mount "$INCUS_SRC:w"
 task up
 ```
 
 [from-source]: https://linuxcontainers.org/incus/docs/main/installing/#install-incus-from-source
+[upgrade]: https://linuxcontainers.org/incus/docs/main/installing/#upgrade-incus
+[zabbly]: https://github.com/zabbly/incus
+[test-readme]: https://github.com/lxc/incus/blob/main/test/README.md

@@ -8,7 +8,8 @@
 # Safe to run again; Lima runs it on every start, see lima.yaml. Settings,
 # from the environment:
 #
-#   INCUS_CHANNEL   Zabbly channel: lts-7.0 (default), lts-6.0 or stable;
+#   INCUS_CHANNEL   Zabbly channel: lts-7.0 (default), lts-6.0, stable or
+#                   daily, the untested nightly builds of the main branch;
 #                   in the VM, PARAM_INCUS_CHANNEL from lima.yaml
 #   INCUSDEV_USER   the user that gets the incus-admin group
 #
@@ -93,14 +94,15 @@ EOF
 }
 
 #
-# Installs the Incus daemon, client and web UI. No qemu package: Zabbly's
-# incus carries its own QEMU and firmware.
+# Installs the Incus daemon, client and web UI, and jq, which the tasks use
+# to read Incus's JSON. No qemu package: Zabbly's incus carries its own QEMU
+# and firmware.
 #
 function install_incus()
 {
-	if ! command -v incus >/dev/null; then
+	if ! command -v incus >/dev/null || ! command -v jq >/dev/null; then
 		log "Installing Incus ..."
-		apt_get install -y incus incus-ui-canonical || return $?
+		apt_get install -y incus incus-ui-canonical jq || return $?
 	fi
 
 	if [[ -n "$user" ]]; then

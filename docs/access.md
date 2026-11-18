@@ -21,8 +21,9 @@ task dashboard -- incus
 This opens the web UI in your browser, already logged in. It works through
 the `incus` client that the Brewfile installs:
 
-1. The script adds a remote named `incusdev` to your incus client, with a
-   one-time token from the VM. The client makes its own certificate.
+1. The script adds a remote named `incusdev` to your incus client, as
+   `task incus` does, with a one-time token from the VM. The client makes
+   its own certificate.
 2. It runs `incus webui incusdev:`. The client serves the web UI on a local
    address and logs in with its certificate, so the browser needs none.
 3. The client stays in the background, because the page works through it.
@@ -42,12 +43,21 @@ incus webui myhost:
 
 ## Incus API, with the incus client
 
-After the first `task dashboard`, the remote is there:
+`task incus` adds the remote `incusdev` to the `incus` client on your
+computer, or replaces it when it no longer answers, and lists your
+remotes. `task dashboard` adds it too.
 
 ```sh
+task incus
 incus list incusdev:
-incus remote switch incusdev     # make it the default
+task incus -- --default          # make it the default remote
+task incus -- --remove           # remove it, and its certificate in the VM
 ```
+
+In a VM that builds Incus from source, `task incus -- --client` also
+builds the client from the same source for your computer, as
+`~/.local/bin/incus-dev`; see
+[Work on Incus itself](incus-development.md#the-client-on-your-computer).
 
 Every `incus` command also works inside the VM, with no remote:
 

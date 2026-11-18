@@ -14,7 +14,9 @@ task status    # follows the install, then lists the services
 ## What you get
 
 - **Incus 7.0 LTS with its web UI.** It runs containers and virtual
-  machines. `task up -- --stable` gives the newest feature release instead.
+  machines. `task up -- --stable` gives the newest feature release instead,
+  `-- --daily` last night's build of the main branch, and
+  [your own build](docs/incus-development.md) is an option too.
 - **A one-node Ceph cluster, if you ask.** `task up -- --ceph` adds block
   storage (RBD) that Incus uses as the storage pool `ceph`, an S3 API and a
   dashboard.
@@ -68,7 +70,7 @@ The services are on `127.0.0.1` on your computer, the last three with Ceph:
 
 | Service | Address | Login |
 |---|---|---|
-| Incus API and web UI | `https://127.0.0.1:26870` | a client certificate; `task dashboard` sets it up |
+| Incus API and web UI | `https://127.0.0.1:26870` | a client certificate; `task incus` or `task dashboard` sets it up |
 | Ceph dashboard | `https://127.0.0.1:26871` | `admin` and a password made at install |
 | S3 API | `http://127.0.0.1:26872` | keys of the user `incusdev`; `task s3-credentials` |
 | RadosGW admin API | `http://127.0.0.1:26872/admin` | keys of the user `incusdev-admin` |
@@ -79,10 +81,12 @@ The services are on `127.0.0.1` on your computer, the last three with Ceph:
 
 | Task | What it does |
 |---|---|
-| `task up` | Create the VM, or start it; `-- --ceph`, `-- --bgp`, `-- --stable` |
+| `task up` | Create the VM, or start it; `-- --ceph`, `-- --bgp`, `-- --stable`, `-- --daily`, `-- --source` |
 | `task status` | Show the VM and its services; follow a start |
 | `task check` | Run the end-to-end test; `-- --vm` with a virtual machine |
 | `task dashboard` | Open the Incus web UI, and with `--ceph` the Ceph dashboard |
+| `task incus` | Add the remote `incusdev` to your `incus` client |
+| `task build`, `task debug` | With `--source`: build Incus again and run it; attach Delve for your debugger |
 | `task s3-credentials` | With `--ceph`: print the S3 endpoint and keys |
 | `task tor`, `task routed` | With `--bgp`: show the BGP session; deploy an instance with a routed NIC |
 | `task reset` | Put the VM back to how it was right after the install |
@@ -99,7 +103,7 @@ The services are on `127.0.0.1` on your computer, the last three with Ceph:
 | Log in to the web UI, the Ceph dashboard and the S3 API | [Access](docs/access.md) |
 | Announce instances over BGP to a top-of-rack switch | [A top-of-rack switch, with BGP](docs/bgp.md) |
 | Install onto a Debian 13 host, with no VM | [Directly on a Debian host](docs/debian-host.md) |
-| Build and test Incus from source in the VM | [Work on Incus itself](docs/incus-development.md) |
+| Run Incus from main or your own build, debug it, and run its test suite | [Work on Incus itself](docs/incus-development.md) |
 | Understand the services, networks, ports and files | [Architecture](docs/architecture.md) |
 | Find out why something fails, or why it is built this way | [Troubleshooting](docs/troubleshooting.md) |
 | Take in newer versions of Debian, Incus and Ceph | [Updates](docs/updates.md) |

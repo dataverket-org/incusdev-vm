@@ -1,0 +1,150 @@
+#!/usr/bin/env bash
+#
+# Sets up the incus client on this computer for the VM: the remote named
+# incusdev, added, or replaced when it no longer works. "task dashboard"
+# does the same before it opens the web UI.
+#
+# In a VM made with "task up -- --source", --client also builds the client
+# from the same source for this computer, so that client and server match.
+# The VM builds it, for this computer's system: no Go is needed here.
+#
+
+source "${0%/*}/../share/incusdev-vm/incusdev-vm.sh" || exit $?
+
+default=""
+remove=""
+client=""
+
+# Where --client puts the client: beside, not in place of, the incus that
+# Homebrew or a package installed.
+client_path="${XDG_BIN_HOME:-$HOME/.local/bin}/incus-dev"
+
+#
+# Prints usage information for task incus.
+#
+function usage()
+{
+	cat <<USAGE
+usage: task incus [-- OPTIONS]
+
+Options:
+
+	    --default		Also makes incusdev your default remote
+	    --remove		Removes the remote, and its certificate in
+				the VM
+	    --client		With --source: builds the client from the VM's
+				source for this computer, as incus-dev in
+				${client_path%/*}
+	-h, --help		Prints this message
+
+Examples:
+
+	$ task incus
+	$ task incus -- --default
+	$ task incus -- --client
+
+USAGE
+}
+
+#
+# Parses command-line options for task incus.
+#
+function parse_options()
+{
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+			--default)
+				default=1
+				shift
+				;;
+			--remove)
+				remove=1
+				shift
+				;;
+			--client)
+				client=1
+				shift
+				;;
+			-h|--help)
+				usage
+				exit
+				;;
+			*)
+				echo "incus: unrecognized option $1" >&2
+				return 1
+				;;
+		esac
+	done
+}
+
+#
+# Prints this computer's system and architecture as Go names them.
+#
+function go_platform()
+{
+	local os arch
+
+	case "$(uname -s)" in
+		Darwin)	os="darwin" ;;
+		Linux)	os="linux" ;;
+		*)	return 1 ;;
+	esac
+	case "$(uname -m)" in
+		arm64|aarch64)	arch="arm64" ;;
+		x86_64)		arch="amd64" ;;
+		*)		return 1 ;;
+	esac
+	echo "$os $arch"
+}
+
+#
+# Builds the client in the VM from the source it builds incusd from, for
+# this computer, and copies it here. Pure Go, so it cross-compiles.
+#
+function build_client()
+{
+	local os arch src
+
+	read -r os arch <<< "$(go_platform)" || return 1
+	src="$(limactl list --format '{{.Param.INCUS_SRC}}' "$name")"
+	# shellcheck disable=SC2016
+	[[ -n "$src" ]] || src="$(guest sh -c 'echo "$HOME/incus"')"
+
+	log "Building the incus client for $os/$arch in $name ..."
+	# shellcheck disable=SC2016
+	guest bash -c 'cd "$1" && GOTOOLCHAIN=auto GOOS="$2" GOARCH="$3" \
+		CGO_ENABLED=0 go build -o /tmp/incusdev-client ./cmd/incus' \
+		bash "$src" "$os" "$arch" || return $?
+
+	mkdir -p "${client_path%/*}" || return $?
+	limactl copy "$name:/tmp/incusdev-client" "$client_path" ||
+		return $?
+	chmod 755 "$client_path" || return $?
+}
+
+parse_options "$@" || exit $?
+check_running      || exit $?
+command -v incus >/dev/null || fail "incus not found. Run: brew bundle"
+
+if [[ -n "$remove" ]]; then
+	remove_remote || fail "Removing the incus remote $name failed!"
+	log "The incus remote $name is removed."
+	exit
+fi
+
+ensure_remote || fail "Setting up the incus remote $name failed!"
+if [[ -n "$default" ]]; then
+	incus remote switch "$name" </dev/null ||
+		fail "Making $name the default remote failed!"
+fi
+
+if [[ -n "$client" ]]; then
+	check_source || exit $?
+	build_client || fail "Building the incus client failed!"
+	log "The client from $name's source: $client_path"
+	"$client_path" version "$name:" </dev/null
+	[[ ":$PATH:" == *":${client_path%/*}:"* ]] ||
+		warn "${client_path%/*} is not in your PATH."
+fi
+
+incus remote list </dev/null

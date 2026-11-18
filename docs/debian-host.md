@@ -12,6 +12,17 @@ sudo provision/ceph.sh      # if you want Ceph: Ceph in Podman, its client,
 sudo provision/check.sh     # the end-to-end test, on Ceph if it is there
 ```
 
+To run Incus built from source on the host, add `incus-source.sh` after
+`incus.sh`; [Work on Incus itself](incus-development.md#how-a-build-runs)
+says what it does. It builds a clone of `INCUS_GIT` at `INCUS_REF` in the
+user's home, or the checkout in `INCUS_SRC`; again, with `--build`:
+
+```sh
+sudo provision/incus-source.sh             # build, and run the build
+sudo provision/incus-source.sh --build     # build again
+sudo provision/incus-source.sh --package   # back to the package's incusd
+```
+
 ## The VM or the host
 
 | | In the Lima VM | On the host |
@@ -61,10 +72,13 @@ The scripts read these from the environment, on a host:
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `INCUS_CHANNEL` | `lts-7.0` | Zabbly channel: `lts-7.0`, `lts-6.0` or `stable` |
+| `INCUS_CHANNEL` | `lts-7.0` | Zabbly channel: `lts-7.0`, `lts-6.0`, `stable` or `daily` |
 | `CEPH_IMAGE` | `quay.io/benjamin_holmes/ceph-aio:v20` | The Ceph container image |
 | `OSD_SIZE` | `10G` | Size of the Ceph disk, on the first run |
-| `INCUSDEV_USER` | who called `sudo` | The user for `incus-admin` and Podman |
+| `INCUSDEV_USER` | who called `sudo` | The user for `incus-admin` and Podman, and that builds Incus |
+| `INCUS_SRC` | none | A checkout for `incus-source.sh` to build, in place of a clone |
+| `INCUS_GIT` | `https://github.com/lxc/incus` | The repository that `incus-source.sh` clones |
+| `INCUS_REF` | `main`, on the first clone | What the clone checks out: a branch, tag, commit or `refs/pull/N/head` |
 
 ```sh
 sudo OSD_SIZE=20G provision/ceph.sh

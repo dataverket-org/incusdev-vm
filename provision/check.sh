@@ -6,8 +6,8 @@
 #   sudo provision/check.sh
 #
 # It checks that an Incus instance boots from the local pool and gets an
-# address, and the Incus API and web UI. Where Ceph is installed, or with
-# --ceph, which fails without it, the instance boots from the ceph pool in
+# address, and the Incus API and web UI. Where ceph.sh has given Incus its
+# pool ceph, or with --ceph, which fails without it, the instance boots from the ceph pool in
 # place of the local one, and it also checks Ceph, the kernel mapping an RBD
 # image, and Ceph's dashboard, S3 API and RadosGW admin API. The instance is
 # a container, which needs no nested virtualization; with --vm it is a
@@ -56,7 +56,7 @@ Options:
 
 	    --vm		Launches a virtual machine in place of a
 				container, which needs KVM
-	    --ceph		Fails unless Ceph is installed
+	    --ceph		Fails unless ceph.sh has installed Ceph
 	-h, --help		Prints this message
 
 Examples:
@@ -278,7 +278,9 @@ parse_options "$@" || exit $?
 
 [[ $EUID -eq 0 ]] || fail "Run this as root!"
 command -v incus >/dev/null || fail "Incus is not installed: run incus.sh!"
-if command -v ceph >/dev/null; then
+# The pool, not the ceph command: incus-source.sh installs ceph-common for
+# the storage driver, without a cluster.
+if incus storage show ceph </dev/null >/dev/null 2>&1; then
 	with_ceph=1
 	pool="ceph"
 	profile="root-ceph"

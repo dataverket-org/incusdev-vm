@@ -12,6 +12,8 @@ source "${0%/*}/../share/incusdev-vm/incusdev-vm.sh" || exit $?
 in_background=""
 with_ceph=""
 with_bgp=""
+with_source=""
+ref=""
 channel=""
 limactl_args=()
 
@@ -32,23 +34,35 @@ Options:
 	    --stable		A new VM gets Incus from Zabbly's stable
 				channel, the newest feature release, in place
 				of the LTS
-	    --channel NAME	The same, for any channel: lts-7.0, lts-6.0
-				or stable
-	    --cpus N		CPUs of a new VM (default: 2)
-	    --memory GIB	Memory of a new VM (default: 2)
+	    --daily		The same, from the daily channel: untested
+				builds of Incus's main branch, every night
+	    --channel NAME	The same, for any channel: lts-7.0, lts-6.0,
+				stable or daily
+	    --source [REF]	A new VM runs Incus built from source: from
+				INCUS_SRC, else from a clone of INCUS_GIT at
+				REF (default: main); on the daily channel
+				unless one is given
+	    --cpus N		CPUs of a new VM (default: 2, with --source 6)
+	    --memory GIB	Memory of a new VM (default: 2, with --source 8)
 	    --disk GIB		Disk of a new VM (default: 20)
 	-h, --help		Prints this message
 	--			Hands the rest to limactl, for a new VM
 
 Environment:
 
-	INCUS_SRC=DIR		Mounts DIR into a new VM, writable, at DIR
+	INCUS_SRC=DIR		Mounts DIR into a new VM, writable, at DIR;
+				with --source the VM builds it
+	INCUS_GIT=URL		The repository that --source clones (default:
+				https://github.com/lxc/incus)
 
 Examples:
 
 	$ task up
 	$ task up -- --ceph
 	$ task up -- --ceph --bgp --stable
+	$ task up -- --source
+	$ task up -- --source refs/pull/1234/head --ceph
+	$ INCUS_SRC=~/src/incus task up -- --source
 	$ task up -- --cpus 4 --memory 8 --disk 40
 
 USAGE
@@ -72,6 +86,18 @@ function parse_options()
 				;;
 			--stable)
 				channel="stable"
+				shift
+				;;
+			--daily)
+				channel="daily"
+				shift
+				;;
+			--source)
+				with_source=1
+				if [[ -n "${2:-}" && "$2" != -* ]]; then
+					ref="$2"
+					shift
+				fi
 				shift
 				;;
 			--channel)
@@ -125,18 +151,44 @@ function platform_options()
 }
 
 #
+# Prints the limactl options for the size of a new VM that builds Incus,
+# where the limactl options given have none.
+#
+function source_size()
+{
+	local size=" ${limactl_args[*]} "
+
+	[[ -n "$with_source" ]] || return 0
+	[[ "$size" == *" --cpus "* ]]   || echo "--cpus 6"
+	[[ "$size" == *" --memory "* ]] || echo "--memory 8"
+}
+
+#
 # Prints the yq expression that gives a new VM its settings: the params
-# that the scripts in provision/ read, see lima.yaml.
+# that the scripts in provision/ read, see lima.yaml. Building from source
+# takes the daily channel, unless one is given: the package around the
+# build is then closest to it.
 #
 function lima_settings()
 {
-	local ceph="off" bgp="off" settings
+	local ceph="off" bgp="off" source="off" settings
 
 	[[ -n "$with_ceph" ]] && ceph="on"
 	[[ -n "$with_bgp" ]] && bgp="on"
+	[[ -n "$with_source" ]] && source="on"
+	[[ -n "$with_source" && -z "$channel" ]] && channel="daily"
+
 	settings=".param.CEPH = \"$ceph\" | .param.BGP = \"$bgp\""
+	settings+=" | .param.SOURCE = \"$source\""
 	[[ -n "$channel" ]] &&
 		settings+=" | .param.INCUS_CHANNEL = \"$channel\""
+	if [[ -n "$with_source" && -n "$incus_src" ]]; then
+		settings+=" | .param.INCUS_SRC = \"$incus_src\""
+	fi
+	[[ -n "$with_source" && -n "$incus_git" ]] &&
+		settings+=" | .param.INCUS_GIT = \"$incus_git\""
+	[[ -n "$ref" ]] &&
+		settings+=" | .param.INCUS_REF = \"$ref\""
 	echo "$settings"
 }
 
@@ -156,7 +208,8 @@ function start_vm()
 
 	# shellcheck disable=SC2046
 	limactl start --tty=false --timeout 20m --name "$name" \
-		$(platform_options) ${incus_src:+--mount "$incus_src:w"} \
+		$(platform_options) $(source_size) \
+		${incus_src:+--mount "$incus_src:w"} \
 		--set "$(lima_settings)" "$@" "$root/lima.yaml" || return $?
 
 	log "Saving a copy of $name for 'task reset', and restarting it ..."
@@ -168,8 +221,8 @@ function start_vm()
 }
 
 #
-# Checks what this computer needs for the VM. Ceph, BGP and the Incus
-# channel are chosen when the VM is made, and hold for its life.
+# Checks what this computer needs for the VM. Ceph, BGP, the Incus channel
+# and the source are chosen when the VM is made, and hold for its life.
 #
 function check_requirements()
 {
@@ -188,11 +241,27 @@ function check_requirements()
 		return 1
 	fi
 
+	if [[ -n "$with_source" ]] && vm_exists && ! vm_has_source; then
+		error "$name runs the packaged Incus!"
+		error "Run: task destroy, task up -- --source"
+		return 1
+	fi
+
+	if [[ -n "$ref" ]] && vm_exists; then
+		error "$name has its source already. Run: task build -- $ref"
+		return 1
+	fi
+
+	if [[ -n "$ref" && -n "$incus_src" ]]; then
+		error "A REF does not go with INCUS_SRC: check it out there."
+		return 1
+	fi
+
 	case "$channel" in
-		""|stable|lts-[0-9]*.0)	;;
+		""|stable|daily|lts-[0-9]*.0)	;;
 		*)
 			error "Unknown Incus channel $channel!"
-			error "Use lts-7.0, lts-6.0 or stable."
+			error "Use lts-7.0, lts-6.0, stable or daily."
 			return 1
 			;;
 	esac
@@ -229,9 +298,13 @@ elif vm_exists; then
 	doing="Starting $name in the background, about 30 seconds."
 else
 	doing="Creating $name in the background, about 6 minutes."
+	[[ -n "$with_source" ]] &&
+		doing="Creating $name and building Incus in the background."
 fi
 
-nohup "$0" --run ${with_ceph:+--ceph} ${with_bgp:+--bgp} ${channel:+--channel "$channel"} \
+nohup "$0" --run ${with_ceph:+--ceph} ${with_bgp:+--bgp} \
+	${with_source:+--source} ${ref:+"$ref"} \
+	${channel:+--channel "$channel"} \
 	-- "${limactl_args[@]}" > "$up_log" 2>&1 </dev/null &
 echo "$!" > "$up_pid" || fail "Writing $up_pid failed!"
 

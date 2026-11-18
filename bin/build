@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+#
+# Builds Incus again in a VM made with "task up -- --source", and restarts
+# incusd from the build; running instances stay up. It runs
+# provision/incus-source.sh from this repository in the VM, so a change to
+# it counts at once.
+#
+
+source "${0%/*}/../share/incusdev-vm/incusdev-vm.sh" || exit $?
+
+ref=""
+debug=""
+package=""
+
+#
+# Prints usage information for task build.
+#
+function usage()
+{
+	cat <<USAGE
+usage: task build [-- [REF] [OPTIONS]]
+
+Arguments:
+
+	REF			Checks out REF in the VM's clone first: a
+				branch, tag, commit or refs/pull/N/head
+
+Options:
+
+	    --debug		A build without optimizations, for Delve and
+				"task debug"
+	    --package		Goes back to the package's incusd; task build
+				comes back to the build
+	-h, --help		Prints this message
+
+Examples:
+
+	$ task build
+	$ task build -- --debug
+	$ task build -- refs/pull/1234/head
+	$ task build -- --package
+
+USAGE
+}
+
+#
+# Parses command-line options for task build.
+#
+function parse_options()
+{
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+			--debug)
+				debug=1
+				shift
+				;;
+			--package)
+				package=1
+				shift
+				;;
+			-h|--help)
+				usage
+				exit
+				;;
+			-*)
+				echo "build: unrecognized option $1" >&2
+				return 1
+				;;
+			*)
+				ref="$1"
+				shift
+				;;
+		esac
+	done
+}
+
+parse_options "$@" || exit $?
+check_source       || exit $?
+
+src="$(limactl list --format '{{.Param.INCUS_SRC}}' "$name")"
+repository="$(limactl list --format '{{.Param.INCUS_GIT}}' "$name")"
+if [[ -n "$ref" && -n "$src" ]]; then
+	fail "$name builds $src: check $ref out there."
+fi
+
+if [[ -n "$package" ]]; then
+	action="--package"
+else
+	action="--build"
+fi
+
+# The script travels as an argument, since stdin is closed in the VM, and
+# its options after it.
+guest sudo env INCUS_SRC="$src" INCUS_GIT="$repository" INCUS_REF="$ref" \
+	bash -c "$(< "$root/provision/incus-source.sh")" bash \
+	"$action" ${debug:+--debug} || fail "task build failed in $name!"

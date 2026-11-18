@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Deletes the VM and everything in it, the copy saved for "task reset", and
-# the incus remote that bin/dash-incus added for it.
+# the incus remote that "task incus" or "task dashboard" added for it.
 #
 
 source "${0%/*}/../share/incusdev-vm/incusdev-vm.sh" || exit $?

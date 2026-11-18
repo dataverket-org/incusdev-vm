@@ -90,6 +90,7 @@ fi
 log "$name is running. Waiting for the services ..."
 wait_for_services || error "Not every service answers yet."
 print_services
+print_incus
 if vm_has_bgp; then
 	wait_for_bgp || error "The BGP session to the ToR is not up yet."
 fi

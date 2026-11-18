@@ -8,7 +8,7 @@ tasks:
       - task --list
 
   up:
-    desc: "Create the VM, or start it; options: -- --ceph --bgp"
+    desc: "Create the VM, or start it; -- --ceph --bgp --source"
     silent: true
     cmds:
       - bin/up {{.CLI_ARGS}}
@@ -18,6 +18,24 @@ tasks:
     silent: true
     cmds:
       - bin/status
+
+  build:
+    desc: "With --source: build Incus again, restart incusd"
+    silent: true
+    cmds:
+      - bin/build {{.CLI_ARGS}}
+
+  debug:
+    desc: "With --source: Delve on incusd, on 127.0.0.1:26873"
+    silent: true
+    cmds:
+      - bin/debug {{.CLI_ARGS}}
+
+  incus:
+    desc: "The incusdev remote for your incus; -- --client"
+    silent: true
+    cmds:
+      - bin/incus-remote {{.CLI_ARGS}}
 
   check:
     desc: "End-to-end test with a container; -- --vm: a VM"
