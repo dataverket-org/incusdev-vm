@@ -20,6 +20,18 @@ function vm_runs()
 }
 
 #
+# Tells whether the VM was made with "task up -- --ceph". Lima keeps the
+# setting, so a stopped VM answers too. A VM made before the setting existed
+# has none, and has Ceph.
+#
+function vm_has_ceph()
+{
+	vm_exists || return 1
+	[[ "$(limactl list --format '{{.Param.CEPH}}' "$name" 2>/dev/null)" != \
+		"off" ]]
+}
+
+#
 # Tells whether the VM was made with "task up -- --bgp". Lima keeps the
 # setting, so a stopped VM answers too.
 #
@@ -56,6 +68,18 @@ function check_running()
 	vm_runs && return
 
 	error "$name is not running. Run: task up"
+	return 1
+}
+
+#
+# Checks that the VM is running and was made with Ceph.
+#
+function check_ceph()
+{
+	check_running || return $?
+	vm_has_ceph && return
+
+	error "$name has no Ceph! Run: task destroy, task up -- --ceph"
 	return 1
 }
 

@@ -8,7 +8,7 @@ tasks:
       - task --list
 
   up:
-    desc: "Create the VM, or start it; -- --bgp: with a ToR"
+    desc: "Create the VM, or start it; options: -- --ceph --bgp"
     silent: true
     cmds:
       - bin/up {{.CLI_ARGS}}
@@ -32,7 +32,7 @@ tasks:
       - bin/dash {{.CLI_ARGS}}
 
   s3-credentials:
-    desc: "S3 endpoint and keys as env vars; -- admin too"
+    desc: "With Ceph: S3 endpoint and keys; -- admin too"
     silent: true
     cmds:
       - bin/s3-credentials {{.CLI_ARGS}}

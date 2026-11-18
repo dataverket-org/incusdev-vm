@@ -2,13 +2,13 @@
 
 The VM is also a place to build and test Incus from source, the way the
 [Incus documentation][from-source] describes, with its Ceph cluster for the
-storage tests. You edit on your computer and build in the VM: set
-`INCUS_SRC` to your checkout before you create the VM, and `task up` mounts
-it into the VM, writable and at the same path.
+storage tests if you make it with `--ceph`. You edit on your computer and
+build in the VM: set `INCUS_SRC` to your checkout before you create the VM,
+and `task up` mounts it into the VM, writable and at the same path.
 
 ```sh
 export INCUS_SRC=~/kode/incus         # in your shell profile
-task up -- --cpus 4 --memory 6
+task up -- --ceph --cpus 4 --memory 6
 cd ~/kode/incus && limactl shell incusdev
 ```
 
@@ -38,7 +38,8 @@ make deps | grep '^export ' >> ~/.bashrc && . ~/.bashrc
 
 ## Build and test
 
-Build, and run a test against the Ceph cluster. `main.sh` takes the
+Build, and run a test against the Ceph cluster, in a VM made with
+`--ceph`. `main.sh` takes the
 name of a test in `test/suites`; without one it runs all of them. Its
 daemons run beside the VM's own Incus and keep their state on a tmpfs. They
 find no QEMU, so they cannot run virtual machines.

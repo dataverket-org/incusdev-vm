@@ -9,7 +9,8 @@
 # The keys of this machine are of the type aes, not the cluster's aes256k.
 # See "Keys of the type aes" in docs/troubleshooting.md.
 #
-# Safe to run again; Lima runs it on every start, see lima.yaml. Settings,
+# Safe to run again; Lima runs it on every start, see lima.yaml, and it does
+# nothing there unless the VM was made with "task up -- --ceph". Settings,
 # from the environment:
 #
 #   CEPH_IMAGE      default quay.io/benjamin_holmes/ceph-aio:v20
@@ -349,6 +350,8 @@ function configure_incus_storage()
 		path=/ pool=ceph || return $?
 }
 
+# A VM made without "task up -- --ceph": Lima says so with PARAM_CEPH=off.
+[[ "${PARAM_CEPH:-on}" == "on" ]] || exit 0
 [[ $EUID -eq 0 ]]       || fail "Run this as root!"
 install_podman          || fail "Installing Podman failed!"
 start_ceph              || fail "Starting the Ceph container failed!"

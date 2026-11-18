@@ -10,6 +10,7 @@
 source "${0%/*}/../share/incusdev-vm/incusdev-vm.sh" || exit $?
 
 in_background=""
+with_ceph=""
 with_bgp=""
 channel=""
 limactl_args=()
@@ -24,6 +25,8 @@ usage: task up [-- OPTIONS]
 
 Options:
 
+	    --ceph		A new VM gets a one-node Ceph cluster: the
+				storage pool ceph, an S3 API and a dashboard
 	    --bgp		A new VM gets a simulated top-of-rack switch,
 				and Bird2 peering with it over BGP
 	    --stable		A new VM gets Incus from Zabbly's stable
@@ -44,7 +47,8 @@ Environment:
 Examples:
 
 	$ task up
-	$ task up -- --bgp --stable
+	$ task up -- --ceph
+	$ task up -- --ceph --bgp --stable
 	$ task up -- --cpus 4 --memory 8 --disk 40
 
 USAGE
@@ -58,6 +62,10 @@ function parse_options()
 {
 	while [[ $# -gt 0 ]]; do
 		case "$1" in
+			--ceph)
+				with_ceph=1
+				shift
+				;;
 			--bgp)
 				with_bgp=1
 				shift
@@ -122,9 +130,11 @@ function platform_options()
 #
 function lima_settings()
 {
-	local settings='.param.BGP = "off"'
+	local ceph="off" bgp="off" settings
 
-	[[ -n "$with_bgp" ]] && settings='.param.BGP = "on"'
+	[[ -n "$with_ceph" ]] && ceph="on"
+	[[ -n "$with_bgp" ]] && bgp="on"
+	settings=".param.CEPH = \"$ceph\" | .param.BGP = \"$bgp\""
 	[[ -n "$channel" ]] &&
 		settings+=" | .param.INCUS_CHANNEL = \"$channel\""
 	echo "$settings"
@@ -158,13 +168,18 @@ function start_vm()
 }
 
 #
-# Checks what this computer needs for the VM. BGP and the Incus channel are
-# chosen when the VM is made, and hold for its life.
+# Checks what this computer needs for the VM. Ceph, BGP and the Incus
+# channel are chosen when the VM is made, and hold for its life.
 #
 function check_requirements()
 {
 	if ! command -v limactl >/dev/null; then
 		error "limactl not found. Run: brew bundle"
+		return 1
+	fi
+
+	if [[ -n "$with_ceph" ]] && vm_exists && ! vm_has_ceph; then
+		error "$name has no Ceph! Run: task destroy, task up -- --ceph"
 		return 1
 	fi
 
@@ -216,7 +231,7 @@ else
 	doing="Creating $name in the background, about 6 minutes."
 fi
 
-nohup "$0" --run ${with_bgp:+--bgp} ${channel:+--channel "$channel"} \
+nohup "$0" --run ${with_ceph:+--ceph} ${with_bgp:+--bgp} ${channel:+--channel "$channel"} \
 	-- "${limactl_args[@]}" > "$up_log" 2>&1 </dev/null &
 echo "$!" > "$up_pid" || fail "Writing $up_pid failed!"
 
