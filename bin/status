@@ -36,14 +36,18 @@ function print_steps()
 }
 
 #
-# Prints what "task up" itself has logged since the last call: that it
-# saves a copy of the VM and restarts it.
+# Prints what "task up" itself has logged since the last call: that Lima
+# downloads the image, and that it saves a copy of the VM and restarts it.
 #
 function print_notes()
 {
 	local lines
 
-	lines="$(grep '^>>>' "$up_log" 2>/dev/null)"
+	lines="$(sed -n \
+		-e '/^>>>/p' \
+		-e 's/^Downloading the image (\(.*\))$/>>> Downloading the image \1 .../p' \
+		-e 's/.*msg="Downloaded the image.*/>>> Downloaded the image./p' \
+		"$up_log" 2>/dev/null)"
 	[[ -n "$lines" ]] || return 0
 
 	echo "$lines" | tail -n "+$(( notes + 1 ))"
