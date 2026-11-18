@@ -150,3 +150,20 @@ is removed.
 After a start of the VM, `incusd` is up before Ceph. Incus marks the pool
 `ceph` as `UNAVAILABLE`, tries again every minute, and finds it once the
 monitor answers. The end-to-end test waits for that.
+
+## The files
+
+```
+provision/incus.sh      installs Incus; runs on a Debian host or in the VM
+provision/ceph.sh       installs Ceph and joins it to Incus; same
+provision/check.sh      the end-to-end test; same
+provision/tor.sh        the simulated ToR, a namespace with Bird2; same
+provision/bird.sh       Bird2 peering with a ToR; same
+lima.yaml               the VM: image, size, the scripts, port forwards
+Taskfile.yml            the tasks; each one calls a script in bin/
+bin/                    one script per task, for the Lima VM
+share/incusdev-vm/      the functions that the scripts in bin/ share
+Brewfile                the tools
+renovate.json           lets Renovate propose newer versions
+docs/                   the details
+```

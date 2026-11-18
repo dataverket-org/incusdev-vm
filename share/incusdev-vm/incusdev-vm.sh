@@ -13,7 +13,7 @@ tor_link="incusdev-tor0"
 tor_socket="/run/incusdev-tor/bird.ctl"
 
 # An Incus source tree on this computer. "task up" mounts it into a new VM,
-# writable and at the same path: see "Work on Incus itself" in README.md.
+# writable and at the same path: see docs/incus-development.md.
 incus_src="${INCUS_SRC:-}"
 
 # Where "task up" keeps the output and the process ID of its background work.
