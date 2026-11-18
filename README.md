@@ -106,13 +106,10 @@ The services are on `127.0.0.1` on your computer, the last three with Ceph:
 
 ## Status
 
-It works on Linux x86_64, which is where the current version is tested: a
-new VM with and without `--bgp`, and the end-to-end test in both. Not yet
-tried in this version:
+It works on Linux x86_64 and on macOS on Apple silicon, which is where the
+current version is tested: a new VM with and without `--bgp`, and the
+end-to-end test in both. Not yet tried in this version:
 
-- macOS. The version before it was tested on Apple silicon; since then the
-  switch moved into the VM and the scripts went to macOS's own bash 3.2.
-- virtual machines in the test, `task check -- --vm`;
 - the tools from Homebrew on Linux, and the scripts run by hand on a
   Debian host.
 
