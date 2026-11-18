@@ -21,10 +21,13 @@ disk: "20GiB"
 
 mounts: []
 
-# Settings for the scripts in provision/, which Lima gives them as PARAM_*.
-# BGP is "on" in a VM made with "task up -- --bgp": provision/tor.sh then
-# gives it a simulated top-of-rack switch, and bird.sh peers with it.
+# Settings for the scripts in provision/, which Lima gives them as PARAM_*;
+# "task up" sets them when the VM is made. INCUS_CHANNEL empty is
+# provision/incus.sh's default, the LTS, and "task up -- --stable" sets it.
+# BGP is "on" with "task up -- --bgp": provision/tor.sh then gives the VM a
+# simulated top-of-rack switch, and bird.sh peers with it.
 param:
+  INCUS_CHANNEL: ""
   BGP: "off"
 
 containerd:

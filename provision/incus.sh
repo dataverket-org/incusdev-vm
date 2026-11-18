@@ -8,14 +8,15 @@
 # Safe to run again; Lima runs it on every start, see lima.yaml. Settings,
 # from the environment:
 #
-#   INCUS_CHANNEL   Zabbly channel: lts-7.0 (default), lts-6.0 or stable
+#   INCUS_CHANNEL   Zabbly channel: lts-7.0 (default), lts-6.0 or stable;
+#                   in the VM, PARAM_INCUS_CHANNEL from lima.yaml
 #   INCUSDEV_USER   the user that gets the incus-admin group
 #
 
 export DEBIAN_FRONTEND=noninteractive
 export HOME=/root
 
-channel="${INCUS_CHANNEL:-lts-7.0}"
+channel="${INCUS_CHANNEL:-${PARAM_INCUS_CHANNEL:-lts-7.0}}"
 # INCUSDEV_USER, else who called sudo, else the first user with a home
 # directory in /home.
 user="${INCUSDEV_USER:-${SUDO_USER:-$(getent passwd |

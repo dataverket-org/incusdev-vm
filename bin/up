@@ -11,6 +11,7 @@ source "${0%/*}/../share/incusdev-vm/incusdev-vm.sh" || exit $?
 
 in_background=""
 with_bgp=""
+channel=""
 limactl_args=()
 
 #
@@ -25,6 +26,11 @@ Options:
 
 	    --bgp		A new VM gets a simulated top-of-rack switch,
 				and Bird2 peering with it over BGP
+	    --stable		A new VM gets Incus from Zabbly's stable
+				channel, the newest feature release, in place
+				of the LTS
+	    --channel NAME	The same, for any channel: lts-7.0, lts-6.0
+				or stable
 	    --cpus N		CPUs of a new VM (default: 2)
 	    --memory GIB	Memory of a new VM (default: 2)
 	    --disk GIB		Disk of a new VM (default: 20)
@@ -38,7 +44,7 @@ Environment:
 Examples:
 
 	$ task up
-	$ task up -- --bgp
+	$ task up -- --bgp --stable
 	$ task up -- --cpus 4 --memory 8 --disk 40
 
 USAGE
@@ -55,6 +61,18 @@ function parse_options()
 			--bgp)
 				with_bgp=1
 				shift
+				;;
+			--stable)
+				channel="stable"
+				shift
+				;;
+			--channel)
+				if [[ -z "${2:-}" ]]; then
+					echo "up: --channel needs a name" >&2
+					return 1
+				fi
+				channel="$2"
+				shift 2
 				;;
 			--cpus|--memory|--disk)
 				if [[ -z "${2:-}" ]]; then
@@ -99,6 +117,20 @@ function platform_options()
 }
 
 #
+# Prints the yq expression that gives a new VM its settings: the params
+# that the scripts in provision/ read, see lima.yaml.
+#
+function lima_settings()
+{
+	local settings='.param.BGP = "off"'
+
+	[[ -n "$with_bgp" ]] && settings='.param.BGP = "on"'
+	[[ -n "$channel" ]] &&
+		settings+=" | .param.INCUS_CHANNEL = \"$channel\""
+	echo "$settings"
+}
+
+#
 # Creates or starts the VM and waits for it. A new VM is stopped once after
 # the install, and a copy of it is saved for "task reset". This is what
 # runs in the background.
@@ -115,8 +147,7 @@ function start_vm()
 	# shellcheck disable=SC2046
 	limactl start --tty=false --timeout 20m --name "$name" \
 		$(platform_options) ${incus_src:+--mount "$incus_src:w"} \
-		${with_bgp:+--set ".param.BGP = \"on\""} \
-		"$@" "$root/lima.yaml" || return $?
+		--set "$(lima_settings)" "$@" "$root/lima.yaml" || return $?
 
 	log "Saving a copy of $name for 'task reset', and restarting it ..."
 	limactl stop "$name" || return $?
@@ -127,8 +158,8 @@ function start_vm()
 }
 
 #
-# Checks what this computer needs for the VM. BGP is chosen when the VM is
-# made: a VM without it does not get it later.
+# Checks what this computer needs for the VM. BGP and the Incus channel are
+# chosen when the VM is made, and hold for its life.
 #
 function check_requirements()
 {
@@ -139,6 +170,21 @@ function check_requirements()
 
 	if [[ -n "$with_bgp" ]] && vm_exists && ! vm_has_bgp; then
 		error "$name has no ToR! Run: task destroy, task up -- --bgp"
+		return 1
+	fi
+
+	case "$channel" in
+		""|stable|lts-[0-9]*.0)	;;
+		*)
+			error "Unknown Incus channel $channel!"
+			error "Use lts-7.0, lts-6.0 or stable."
+			return 1
+			;;
+	esac
+
+	if [[ -n "$channel" ]] && vm_exists; then
+		error "$name keeps the Incus it was made with!"
+		error "Run: task destroy, task up -- --channel $channel"
 		return 1
 	fi
 
@@ -170,8 +216,8 @@ else
 	doing="Creating $name in the background, about 6 minutes."
 fi
 
-nohup "$0" --run ${with_bgp:+--bgp} -- "${limactl_args[@]}" \
-	> "$up_log" 2>&1 </dev/null &
+nohup "$0" --run ${with_bgp:+--bgp} ${channel:+--channel "$channel"} \
+	-- "${limactl_args[@]}" > "$up_log" 2>&1 </dev/null &
 echo "$!" > "$up_pid" || fail "Writing $up_pid failed!"
 
 log "$doing"
