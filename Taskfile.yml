@@ -8,7 +8,7 @@ tasks:
       - task --list
 
   up:
-    desc: "Create the VM, or start it; -- --tor: with a ToR"
+    desc: "Create the VM, or start it; -- --bgp: with a ToR"
     silent: true
     cmds:
       - bin/up {{.CLI_ARGS}}
@@ -37,14 +37,8 @@ tasks:
     cmds:
       - bin/s3-credentials {{.CLI_ARGS}}
 
-  p2p:
-    desc: "Lay the link to the ToR; again after a Mac restart"
-    silent: true
-    cmds:
-      - bin/p2p
-
   tor:
-    desc: "BGP session and routes; -- shell: a shell on the ToR"
+    desc: "BGP session and routes; -- shell: a shell in the ToR"
     silent: true
     cmds:
       - bin/tor {{.CLI_ARGS}}
@@ -79,4 +73,4 @@ tasks:
     desc: "shellcheck on the scripts, validate the Lima files"
     cmds:
       - shellcheck -s bash -e SC2034,SC2154,SC1090,SC1091,SC2242 bin/* share/incusdev-vm/*.sh provision/*.sh
-      - limactl validate lima.yaml tor.yaml
+      - limactl validate lima.yaml

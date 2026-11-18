@@ -21,11 +21,14 @@ disk: "20GiB"
 
 mounts: []
 
-# Settings for the scripts in provision/, which Lima gives them as PARAM_*.
-# Empty: provision/incus.sh's default, the LTS. "task up -- --stable" sets
-# it when the VM is made.
+# Settings for the scripts in provision/, which Lima gives them as PARAM_*;
+# "task up" sets them when the VM is made. INCUS_CHANNEL empty is
+# provision/incus.sh's default, the LTS, and "task up -- --stable" sets it.
+# BGP is "on" with "task up -- --bgp": provision/tor.sh then gives the VM a
+# simulated top-of-rack switch, and bird.sh peers with it.
 param:
   INCUS_CHANNEL: ""
+  BGP: "off"
 
 containerd:
   system: false
@@ -33,8 +36,8 @@ containerd:
 
 # The scripts that also install the testbed on a Debian host. Lima copies
 # them into the VM when it is created, so a change to them needs a new VM,
-# and runs them as root on every start. bird.sh does nothing unless the VM
-# was made with "task up -- --tor", which gives it the link to the ToR.
+# and runs them as root on every start. tor.sh and bird.sh do nothing unless
+# the VM was made with "task up -- --bgp".
 #
 # The boot step makes incus-admin a default group for new users, before Lima
 # creates the VM's user: a group that incus.sh adds would only count after a
@@ -53,6 +56,8 @@ provision:
     getsubids -g root >/dev/null 2>&1 || echo "root:1000000:1000000000" >> /etc/subgid
 - mode: system
   file: provision/incus.sh
+- mode: system
+  file: provision/tor.sh
 - mode: system
   file: provision/bird.sh
 - mode: system

@@ -40,6 +40,51 @@ function fail()
 }
 
 #
+# Prints usage information for check.sh.
+#
+function usage()
+{
+	cat <<USAGE
+usage: check.sh [OPTIONS]
+
+Options:
+
+	    --vm		Launches a virtual machine in place of a
+				container, which needs KVM
+	-h, --help		Prints this message
+
+Examples:
+
+	$ sudo provision/check.sh
+	$ sudo provision/check.sh --vm
+
+USAGE
+}
+
+#
+# Parses command-line options for check.sh.
+#
+function parse_options()
+{
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+			--vm)
+				mode="vm"
+				shift
+				;;
+			-h|--help)
+				usage
+				exit
+				;;
+			*)
+				echo "check.sh: unrecognized option $1" >&2
+				return 1
+				;;
+		esac
+	done
+}
+
+#
 # Checks that the machine has KVM and that Incus found QEMU.
 #
 function check_kvm()
@@ -98,7 +143,8 @@ function wait_for_pool()
 {
 	local tries=36
 
-	until incus storage list -f csv </dev/null | grep -q '^ceph,.*,CREATED'; do
+	until incus storage list -f csv </dev/null |
+	      grep -q '^ceph,.*,CREATED'; do
 		(( tries-- > 0 )) || return 1
 		sleep 5
 	done
@@ -175,7 +221,8 @@ function check_signed()
 	local keys
 
 	keys="$(radosgw-admin user info --uid "$user" 2>/dev/null |
-		jq -r '.keys[0] | "\(.access_key):\(.secret_key)"')" || return $?
+		jq -r '.keys[0] | "\(.access_key):\(.secret_key)"')" ||
+		return $?
 	check_url "$url" "$expected" \
 		--aws-sigv4 "aws:amz:us-east-1:s3" --user "$keys" || return $?
 }
@@ -214,12 +261,7 @@ function check_services()
 	check_signed incusdev       "$admin" 403               || return $?
 }
 
-for arg in "$@"; do
-	case "$arg" in
-		--vm)	mode="vm" ;;
-		*)	fail "check.sh: unknown argument $arg; the one option is --vm" ;;
-	esac
-done
+parse_options "$@" || exit $?
 
 [[ $EUID -eq 0 ]] || fail "Run this as root!"
 command -v incus >/dev/null || fail "Incus is not installed: run incus.sh!"
@@ -227,22 +269,22 @@ command -v ceph >/dev/null  || fail "Ceph is not installed: run ceph.sh!"
 
 if [[ "$mode" == vm ]]; then
 	log "Checking KVM ..."
-	check_kvm || fail "No KVM here: Incus cannot run virtual machines! Without --vm the test uses a container."
+	check_kvm || fail "No KVM here! Without --vm the test uses a container."
 else
 	log "Checking that Incus runs containers ..."
 	check_lxc || fail "Incus has no LXC driver!"
 fi
 log "Checking Ceph ..."
-check_ceph         || fail "Ceph does not answer client.incus, or has errors!"
+check_ceph         || fail "Ceph has errors, or does not answer client.incus!"
 log "Mapping an RBD image with the kernel ..."
 check_rbd_map      || fail "The kernel cannot map an RBD image!"
 log "Waiting for the ceph pool in Incus ..."
 wait_for_pool      || fail "Incus does not have the ceph pool!"
-log "Launching $instance from $image on the ceph pool, as a ${mode/vm/virtual machine} ..."
+log "Launching $instance, a ${mode/vm/virtual machine}, on the ceph pool ..."
 launch_instance    || fail "Launching $instance failed!"
 wait_for_instance  || fail "$instance did not come up!"
 log "Checking the RBD images behind $instance ..."
-check_instance_rbd || fail "$instance does not run from mapped RBD images!"
+check_instance_rbd || fail "$instance does not run from RBD images!"
 incus delete --force "$instance" </dev/null ||
 	fail "Deleting $instance failed!"
 log "Checking the services ..."

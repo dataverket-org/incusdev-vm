@@ -20,6 +20,16 @@ function vm_runs()
 }
 
 #
+# Tells whether the VM was made with "task up -- --bgp". Lima keeps the
+# setting, so a stopped VM answers too.
+#
+function vm_has_bgp()
+{
+	[[ "$(limactl list --format '{{.Param.BGP}}' "$name" 2>/dev/null)" == \
+		"on" ]]
+}
+
+#
 # Tells whether "task up" is at work in the background.
 #
 function up_runs()
@@ -56,12 +66,4 @@ function check_running()
 function guest()
 {
 	limactl shell --workdir / "$name" "$@" </dev/null
-}
-
-#
-# Runs a command inside the ToR's VM, with stdin closed.
-#
-function tor_guest()
-{
-	limactl shell --workdir / "$tor" "$@" </dev/null
 }

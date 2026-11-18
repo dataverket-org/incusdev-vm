@@ -16,8 +16,8 @@ alone, so that a failing test points at one cause.
 | Ceph release | `provision/ceph.sh` | when Ceph is installed | a new VM |
 | Alpine release of the test | `provision/check.sh` | on every test | the running VM |
 
-The same versions are mentioned in the README, and Renovate changes them
-there too.
+The same versions are mentioned in the README and in `docs/`, and Renovate
+changes them there too.
 
 Renovate has to be running against the repository for any of this to happen.
 `renovate.json` is only its configuration.

@@ -120,15 +120,22 @@ for it: launch with `--config security.secureboot=false`.
 
 ## What is tested
 
-The Lima VM is tested on Linux x86_64 and on macOS with Apple silicon (M5,
-macOS 26): a new VM, `task check` with a container and with `-- --vm`,
-`task down` and `task up`, `task reset` and `task s3-credentials`.
-`task check` logs in to the Ceph dashboard with its password.
+On Linux x86_64, Ubuntu 24.04 with Lima 2.3.0 and QEMU: a new VM in both
+modes, `task status` and `task check` with a container; with `--bgp` also
+`task tor`, `task routed`, `task down` and `task reset`; and
+`task up -- --bgp --stable`. `task check` logs in to the Ceph dashboard with
+its password. Every script parses under bash 3.2, which macOS has.
 
 Not tested:
 
+- macOS, since the ToR moved into the VM and the scripts went to bash 3.2.
+  Before that the Lima VM was tested there on Apple silicon (M5, macOS 26).
+- `task check -- --vm` and `task routed -- --vm`, since the same change.
 - `task dashboard` on macOS, and on Linux since it prints the dashboard's
   password.
 - arm64 on Linux.
-- The three scripts run by hand on a plain Debian 13 machine, since they
-  changed to keys of the type `aes`.
+- Homebrew's Lima and QEMU on Linux, and the Arch packages of
+  [docs/install.md](install.md).
+- The scripts run by hand on a plain Debian 13 machine, since they changed
+  to keys of the type `aes`. `tor.sh` and `bird.sh` alone are: on a plain
+  Debian 13 virtual machine, with a stand-in for `incusbr0`.

@@ -10,8 +10,8 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Debian cloud image build that the Lima VMs boot",
-      "managerFilePatterns": ["/^lima\\.yaml$/", "/^tor\\.yaml$/"],
+      "description": "Debian cloud image build that the Lima VM boots",
+      "managerFilePatterns": ["/^lima\\.yaml$/"],
       "matchStrings": [
         "cloud/trixie/(?<currentValue>\\d{8}-\\d+)/",
         "-(?:amd64|arm64)-(?<currentValue>\\d{8}-\\d+)\\.qcow2"
@@ -25,7 +25,7 @@
     {
       "customType": "regex",
       "description": "Ceph container image, by major version tag. The versions come from Ceph's own tags and count only once a stable release (x.2.y) exists, so development images are not proposed",
-      "managerFilePatterns": ["/^provision/ceph\\.sh$/", "/^README\\.md$/"],
+      "managerFilePatterns": ["/^provision/ceph\\.sh$/", "/^README\\.md$/", "/^docs/.+\\.md$/"],
       "matchStrings": [
         "quay\\.io/benjamin_holmes/ceph-aio:v(?<currentValue>\\d+)"
       ],
@@ -38,7 +38,7 @@
     {
       "customType": "regex",
       "description": "Incus LTS release, which names the Zabbly package channel",
-      "managerFilePatterns": ["/^provision/incus\\.sh$/", "/^README\\.md$/"],
+      "managerFilePatterns": ["/^provision/incus\\.sh$/", "/^README\\.md$/", "/^docs/.+\\.md$/"],
       "matchStrings": [
         "INCUS_CHANNEL:-lts-(?<currentValue>\\d+\\.0)\\}",
         "lts-(?<currentValue>\\d+\\.0) \\(default\\)",
@@ -54,7 +54,7 @@
     {
       "customType": "regex",
       "description": "Alpine release that the end-to-end test boots",
-      "managerFilePatterns": ["/^provision/check\\.sh$/", "/^README\\.md$/"],
+      "managerFilePatterns": ["/^provision/check\\.sh$/", "/^README\\.md$/", "/^docs/.+\\.md$/"],
       "matchStrings": ["images:alpine/(?<currentValue>\\d+\\.\\d+)"],
       "depNameTemplate": "alpine",
       "datasourceTemplate": "docker"
