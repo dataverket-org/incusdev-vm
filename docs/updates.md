@@ -5,7 +5,7 @@ How newer versions get in, and how to check one before it is merged.
 ## What Renovate proposes
 
 [Renovate](https://docs.renovatebot.com) reads `renovate.json` and opens a
-pull request when one of four versions has a newer release. The goal is that
+pull request when one of five versions has a newer release. The goal is that
 no version in the project goes stale unnoticed, and that each change arrives
 alone, so that a failing test points at one cause.
 
@@ -15,6 +15,7 @@ alone, so that a failing test points at one cause.
 | Incus LTS channel | `provision/incus.sh` | when Incus is installed | a new VM |
 | Ceph release | `provision/ceph.sh` | when Ceph is installed | a new VM |
 | Alpine release of the test | `provision/check.sh` | on every test | the running VM |
+| Delve, for `task debug` | `provision/incus-source.sh` | when the VM is made with `--source` | a new VM with `--source`, `task debug` |
 
 The same versions are mentioned in the README and in `docs/`, and Renovate
 changes them there too.
@@ -59,13 +60,13 @@ test fails, and the pull request stays open until the scripts are changed.
 
 ## What a version does not pin
 
-Three of the four versions choose a stream, not an exact build. What is
+Three of the five versions choose a stream, not an exact build. What is
 installed is decided on the day of the install:
 
 | Set in the project | Installed |
 |---|---|
 | The Ceph image tag, `v20` | the image behind that tag, which is rebuilt every week |
-| The Incus channel, `lts-7.0` | the newest build in that channel |
+| The Incus channel, `lts-7.0` | the newest build in that channel; with `--daily`, last night's build of `main`, which changes every day |
 | nothing | the Ceph client and the other Debian packages of the day |
 
 So two VMs built from the same commit a week apart can differ, and no pull

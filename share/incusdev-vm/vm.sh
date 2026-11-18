@@ -32,6 +32,15 @@ function vm_has_ceph()
 }
 
 #
+# Tells whether the VM was made with "task up -- --source".
+#
+function vm_has_source()
+{
+	[[ "$(limactl list --format '{{.Param.SOURCE}}' "$name" 2>/dev/null)" == \
+		"on" ]]
+}
+
+#
 # Tells whether the VM was made with "task up -- --bgp". Lima keeps the
 # setting, so a stopped VM answers too.
 #
@@ -68,6 +77,19 @@ function check_running()
 	vm_runs && return
 
 	error "$name is not running. Run: task up"
+	return 1
+}
+
+#
+# Checks that the VM is running and builds Incus from source.
+#
+function check_source()
+{
+	check_running || return $?
+	vm_has_source && return
+
+	error "$name runs the packaged Incus! Run: task destroy,"
+	error "task up -- --source"
 	return 1
 }
 

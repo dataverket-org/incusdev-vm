@@ -11,8 +11,11 @@ takes: `task up -- -h`.
 
 | Task | What it does |
 |---|---|
-| `task up` | Create the VM, or start it, in the background; `-- --ceph` creates it with Ceph, see [Ceph](#ceph); `-- --bgp` with a ToR, see [A top-of-rack switch](bgp.md); `-- --stable` creates it with Incus from Zabbly's stable channel in place of the LTS, for the VM's life |
+| `task up` | Create the VM, or start it, in the background; `-- --ceph` creates it with Ceph, see [Ceph](#ceph); `-- --bgp` with a ToR, see [A top-of-rack switch](bgp.md); `-- --stable` creates it with Incus from Zabbly's stable channel in place of the LTS, `-- --daily` from the daily builds of `main`, and `-- --source` with Incus built from source, see [Work on Incus itself](incus-development.md), for the VM's life |
 | `task status` | Show the VM and its services; while it starts, follow the steps |
+| `task build` | With `--source`: build Incus again and restart `incusd` from it; `-- REF` checks out a ref first, `--debug` builds for Delve, `--package` goes back to the package's; see [Work on Incus itself](incus-development.md) |
+| `task debug` | With `--source`: attach Delve to `incusd`, for a debugger on `127.0.0.1:26873`; `-- --stop` detaches |
+| `task incus` | Add the remote `incusdev` to the `incus` client on your computer; `-- --default`, `--remove`, and with `--source` `--client` |
 | `task check` | Run the end-to-end test, with a container, on Ceph when the VM has it; `-- --vm` launches a virtual machine instead, which needs nested virtualization |
 | `task dashboard` | Open the Incus web UI, logged in, and with Ceph the Ceph dashboard, and print its password. One of them: `-- incus` or `-- ceph` |
 | `task s3-credentials` | With Ceph: print the S3 endpoint and keys; `-- admin` for the RadosGW admin user |
@@ -31,7 +34,7 @@ services and whether each one answers. The last three are there with Ceph:
 
 ```
 >>> Services on this computer:
-  Incus API          https://127.0.0.1:26870     up    task dashboard adds the incus remote
+  Incus API          https://127.0.0.1:26870     up    task incus adds the incus remote
   Incus web UI       https://127.0.0.1:26870/ui/ up    task dashboard -- incus
   Ceph dashboard     https://127.0.0.1:26871     up    task dashboard -- ceph
   S3 API             http://127.0.0.1:26872      up    task s3-credentials
@@ -61,8 +64,11 @@ task up -- --cpus 4 -- --video
 ```
 
 The Incus release is chosen then too. `--stable` takes Zabbly's stable
-channel, the newest feature release, in place of the LTS, and
-`--channel NAME` any channel. The choice holds for the VM's life:
+channel, the newest feature release, in place of the LTS; `--daily` the
+daily channel, untested builds of Incus's main branch from every night;
+and `--channel NAME` any channel. For Incus built from source, see
+[Work on Incus itself](incus-development.md). The choice holds for the
+VM's life:
 
 ```sh
 task up -- --stable
@@ -103,5 +109,5 @@ incus list
 | `root-ceph` | with `--ceph`: the pool `ceph`, an RBD image in the Ceph cluster |
 
 Run these on the host itself, in the VM with `limactl shell incusdev`, or
-from your computer once `task dashboard` has added the remote:
+from your computer once `task incus` has added the remote:
 `incus list incusdev:`.

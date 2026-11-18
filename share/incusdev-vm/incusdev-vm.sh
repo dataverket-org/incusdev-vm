@@ -16,6 +16,9 @@ tor_socket="/run/incusdev-tor/bird.ctl"
 # writable and at the same path: see docs/incus-development.md.
 incus_src="${INCUS_SRC:-}"
 
+# The repository that "task up -- --source" clones, when not upstream's.
+incus_git="${INCUS_GIT:-}"
+
 # Where "task up" keeps the output and the process ID of its background work.
 up_log="${TMPDIR:-/tmp}/$name-up.log"
 up_pid="${TMPDIR:-/tmp}/$name-up.pid"
@@ -24,3 +27,4 @@ source "$share/logging.sh"  || return $?
 source "$share/vm.sh"       || return $?
 source "$share/services.sh" || return $?
 source "$share/tor.sh"      || return $?
+source "$share/remote.sh"   || return $?

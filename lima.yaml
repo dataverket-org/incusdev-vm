@@ -26,11 +26,18 @@ mounts: []
 # provision/incus.sh's default, the LTS, and "task up -- --stable" sets it.
 # CEPH is "on" with "task up -- --ceph": provision/ceph.sh then installs
 # Ceph. BGP is "on" with "task up -- --bgp": provision/tor.sh then gives the
-# VM a simulated top-of-rack switch, and bird.sh peers with it.
+# VM a simulated top-of-rack switch, and bird.sh peers with it. SOURCE is
+# "on" with "task up -- --source": provision/incus-source.sh then builds
+# Incus from INCUS_SRC, the mounted checkout, or from a clone of INCUS_GIT
+# at INCUS_REF, and runs the build in place of the package's incusd.
 param:
   INCUS_CHANNEL: ""
   CEPH: "off"
   BGP: "off"
+  SOURCE: "off"
+  INCUS_SRC: ""
+  INCUS_GIT: ""
+  INCUS_REF: ""
 
 containerd:
   system: false
@@ -38,9 +45,10 @@ containerd:
 
 # The scripts that also install the testbed on a Debian host. Lima copies
 # them into the VM when it is created, so a change to them needs a new VM,
-# and runs them as root on every start. ceph.sh does nothing unless the VM
-# was made with "task up -- --ceph", tor.sh and bird.sh nothing unless it
-# was made with "task up -- --bgp".
+# and runs them as root on every start. incus-source.sh does nothing unless
+# the VM was made with "task up -- --source", ceph.sh nothing unless with
+# "task up -- --ceph", tor.sh and bird.sh nothing unless with
+# "task up -- --bgp".
 #
 # The boot step makes incus-admin a default group for new users, before Lima
 # creates the VM's user: a group that incus.sh adds would only count after a
@@ -59,6 +67,8 @@ provision:
     getsubids -g root >/dev/null 2>&1 || echo "root:1000000:1000000000" >> /etc/subgid
 - mode: system
   file: provision/incus.sh
+- mode: system
+  file: provision/incus-source.sh
 - mode: system
   file: provision/tor.sh
 - mode: system
@@ -79,6 +89,8 @@ portForwards:
   hostPort: 26871
 - guestPort: 8000   # S3 API, the Ceph object gateway, with --ceph
   hostPort: 26872
+- guestPort: 2345   # Delve, with --source and "task debug"
+  hostPort: 26873
 - guestIP: "0.0.0.0"
   guestIPMustBeZero: false
   guestPortRange: [1, 65535]

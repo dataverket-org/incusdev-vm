@@ -92,6 +92,7 @@ monitor would advertise an address that only exists inside the container.
 | 8443 | all VM addresses | Incus API and web UI (`/ui/`) | yes, `https://127.0.0.1:26870` |
 | 8444 | all VM addresses | Ceph dashboard | yes, `https://127.0.0.1:26871` |
 | 8000 | all VM addresses | S3 API of the Ceph object gateway (RadosGW), and the RadosGW admin API under `/admin` | yes, `http://127.0.0.1:26872` |
+| 2345 | `127.0.0.1` in the VM | Delve, while `task debug` runs, with `--source` | yes, `127.0.0.1:26873` |
 | 3300, 6789 | `192.168.5.15` | Ceph monitor, protocol v2 and v1 | no |
 | 6800-6811 | `192.168.5.15` | Ceph OSD, manager and metadata server | no |
 | 53, 67 | `incusbr0` | DNS and DHCP for instances | no |
@@ -158,6 +159,7 @@ monitor answers. The end-to-end test waits for that.
 
 ```
 provision/incus.sh      installs Incus; runs on a Debian host or in the VM
+provision/incus-source.sh  builds Incus and runs the build, with --source; same
 provision/ceph.sh       installs Ceph and joins it to Incus, with --ceph; same
 provision/check.sh      the end-to-end test; same
 provision/tor.sh        the simulated ToR, a namespace with Bird2; same
