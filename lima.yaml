@@ -21,6 +21,12 @@ disk: "20GiB"
 
 mounts: []
 
+# Settings for the scripts in provision/, which Lima gives them as PARAM_*.
+# Empty: provision/incus.sh's default, the LTS. "task up -- --stable" sets
+# it when the VM is made.
+param:
+  INCUS_CHANNEL: ""
+
 containerd:
   system: false
   user: false

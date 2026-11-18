@@ -7,7 +7,8 @@ them in a VM on your computer.
 
 ## What you get
 
-- Incus 7.0 LTS with its web UI, running virtual machines and containers.
+- Incus 7.0 LTS with its web UI, running virtual machines and containers;
+  `task up -- --stable` gives the newest feature release instead.
 - A one-node Ceph cluster with block storage (RBD), an S3 API and a dashboard.
 - Two Incus storage pools: `default` on local disk and `ceph` on RBD.
 - On macOS, if you ask for it: a simulated top-of-rack switch, a second VM
@@ -61,7 +62,7 @@ services and whether each one answers:
 
 | Task | What it does |
 |---|---|
-| `task up` | Create the VM, or start it, in the background; `-- --tor` creates it with a ToR, see [A top-of-rack switch](#a-top-of-rack-switch-with-bgp) |
+| `task up` | Create the VM, or start it, in the background; `-- --tor` creates it with a ToR, see [A top-of-rack switch](#a-top-of-rack-switch-with-bgp); `-- --stable` creates it with Incus from Zabbly's stable channel in place of the LTS, for the VM's life |
 | `task status` | Show the VM and its services; while it starts, follow the steps |
 | `task check` | Run the end-to-end test, with a container; `-- --vm` launches a virtual machine instead, which needs nested virtualization |
 | `task dashboard` | Open the Incus web UI, logged in, and the Ceph dashboard, and print its password. One of them: `-- incus` or `-- ceph` |
