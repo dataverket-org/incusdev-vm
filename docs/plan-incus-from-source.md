@@ -140,9 +140,10 @@ macOS on Apple silicon (M5), resized to 6 CPUs and 8 GiB:
 - The client for macOS builds in the VM in 8 s, with `GOOS=darwin
   CGO_ENABLED=0 go build ./cmd/incus`, and runs on the Mac. No Go is
   needed on your computer, and it works for a clone too.
-- Sizes: the user asked for 6 CPUs and 8 GiB as the default with
-  `--source` only. Measured at the end, see [Results](#results): 2 CPUs
-  and 2 GiB build as well, once Go's temporary files are on the disk.
+- Sizes: 6 CPUs and 8 GiB was the default with `--source` at first.
+  Measured at the end, see [Results](#results): 2 CPUs and 2 GiB build
+  as well, once Go's temporary files are on the disk, so `--source` keeps
+  the default size.
 
 ### 1. The daily channel
 
@@ -175,8 +176,9 @@ nothing in a VM made without `--source`.
 
 - `bin/up`: `--source [REF]`, a `SOURCE` setting in `lima.yaml` kept for
   the VM's life, like `CEPH`; `INCUS_GIT` and `INCUS_REF` passed in.
-  `--source` takes `daily` unless a channel is given, and a larger default
-  size, from what the spike measured.
+  `--source` takes `daily` unless a channel is given. The size stays the
+  default, 2 CPUs and 2 GiB: the build needs no more, see
+  [Results](#results).
 - With `INCUS_SRC` set, `--source` builds the mounted checkout, and a
   `REF` is an error.
 - The copy for `task reset` is saved after the first build: a reset goes
@@ -260,6 +262,7 @@ a new VM:
 | `task up`, the default | ready in 1.5 min, on `lts-7.0`; `task check`; `task incus` |
 | `INCUS_GIT` a fork, `--source storage`, `--cpus 2 --memory 4` | the fork's branch at its commit; a cold build measured; `task check`; `-- --package` and a restart, `task build` and a restart; upstream's test suite, `certificate_edit`, with the command in the docs |
 | `--source --bgp`, the final code | ready in 3 min; `task check` and `task check -- --vm`, with the ToR; `task routed -- --vm`; `task debug` with the Debug Adapter Protocol, as VS Code attaches with `mode: remote`: a breakpoint by source line verified and hit, `continue`, `disconnect` without ending `incusd`; then resized to 2 CPUs and 2 GiB, a cold build measured, and `task check` |
+| `--source`, the default size, 2 CPUs and 2 GiB | ready in 4 min, the build at the first boot included; `task check` |
 
 Cold builds, `make deps` and `make` with an empty cache:
 

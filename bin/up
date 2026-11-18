@@ -42,8 +42,8 @@ Options:
 				INCUS_SRC, else from a clone of INCUS_GIT at
 				REF (default: main); on the daily channel
 				unless one is given
-	    --cpus N		CPUs of a new VM (default: 2, with --source 6)
-	    --memory GIB	Memory of a new VM (default: 2, with --source 8)
+	    --cpus N		CPUs of a new VM (default: 2)
+	    --memory GIB	Memory of a new VM (default: 2)
 	    --disk GIB		Disk of a new VM (default: 20)
 	-h, --help		Prints this message
 	--			Hands the rest to limactl, for a new VM
@@ -151,19 +151,6 @@ function platform_options()
 }
 
 #
-# Prints the limactl options for the size of a new VM that builds Incus,
-# where the limactl options given have none.
-#
-function source_size()
-{
-	local size=" ${limactl_args[*]} "
-
-	[[ -n "$with_source" ]] || return 0
-	[[ "$size" == *" --cpus "* ]]   || echo "--cpus 6"
-	[[ "$size" == *" --memory "* ]] || echo "--memory 8"
-}
-
-#
 # Prints the yq expression that gives a new VM its settings: the params
 # that the scripts in provision/ read, see lima.yaml. Building from source
 # takes the daily channel, unless one is given: the package around the
@@ -208,8 +195,7 @@ function start_vm()
 
 	# shellcheck disable=SC2046
 	limactl start --tty=false --timeout 20m --name "$name" \
-		$(platform_options) $(source_size) \
-		${incus_src:+--mount "$incus_src:w"} \
+		$(platform_options) ${incus_src:+--mount "$incus_src:w"} \
 		--set "$(lima_settings)" "$@" "$root/lima.yaml" || return $?
 
 	log "Saving a copy of $name for 'task reset', and restarting it ..."

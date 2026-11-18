@@ -30,8 +30,9 @@ has; for a change of your own, build it.
 
 ## How a build runs
 
-`task up -- --source` makes a VM of 6 CPUs and 8 GiB, unless you give a
-size, on the `daily` channel, unless you give one. While the VM is made,
+`task up -- --source` makes a VM of the usual size, 2 CPUs and 2 GiB,
+unless you give one, on the `daily` channel, unless you give one. While
+the VM is made,
 `provision/incus-source.sh`:
 
 1. installs upstream's Debian packages for the build, the test suite's,
@@ -53,13 +54,11 @@ drop-ins, `incusdev-source.conf` for `incus.service` and
 which get `/opt/incusdev` in front of `/opt/incus`. In the VM, `incus` is
 the build's client too.
 
-A new VM with `--source`, `--ceph` and `--bgp` is ready in about 6
-minutes, the build included. A first build, with `make deps`, takes about a
-minute on 6 CPUs, and about 2.3 GiB of memory. The default size is
-generous: on 2 CPUs a first build takes 73 s with 4 GiB and 78 s with
-2 GiB, where it needs about 1.1 GiB. Go's temporary files go to the disk,
-since `/tmp` is a tmpfs of half the memory. A rebuild only compiles what
-changed:
+The default size builds Incus: on 2 CPUs and 2 GiB a first build, with
+`make deps`, takes 78 s and needs about 1.1 GiB of memory. More CPUs make it
+faster, 48 s on 6: `task up -- --source --cpus 6 --memory 4`. Go's
+temporary files go to the disk, since `/tmp` is a tmpfs of half the memory.
+A rebuild only compiles what changed; measured on 6 CPUs:
 
 | `task build` after | Takes, with the restart |
 |---|---|
